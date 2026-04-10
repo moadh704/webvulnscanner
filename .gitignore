@@ -1,0 +1,22 @@
+# Virtual Environment (never upload this)
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Windows temporary files
+Thumbs.db
+Desktop.ini
+
+# Old duplicate folder (if it comes back)
+2/
+
+# Logs and temporary files
+*.log
+
+# Editor folders
+.vscode/
+.idea/
