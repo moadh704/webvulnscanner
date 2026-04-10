@@ -172,6 +172,14 @@ def main():
         endpoints = crawler.crawl()
         print(f"[*] Crawler found {len(endpoints)} endpoint(s) to test.\n")
 
+        # ── SQLi Injector ─────────────────────────────────────────────────────
+        if scan_manager.is_active('sqli'):
+            from dynamic.sqli_injector import SQLiInjector
+            sqli_findings = SQLiInjector(
+                crawler.session, scan_manager
+            ).run(endpoints)
+            all_findings.extend(sqli_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")

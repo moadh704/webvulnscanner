@@ -105,10 +105,13 @@ class Crawler:
             self._add_endpoint(action_url, method, params)
 
     def _add_endpoint(self, url: str, method: str, params: dict):
-        key = (url, method, frozenset(params.keys()))
+        clean_url = url.split('#')[0]   # strip fragment — never sent to server
+        if not clean_url:
+            return
+        key = (clean_url, method, frozenset(params.keys()))
         if key not in {(e['url'], e['method'], frozenset(e['params'].keys()))
                        for e in self.endpoints}:
-            self.endpoints.append({'url': url, 'method': method, 'params': params})
+            self.endpoints.append({'url': clean_url, 'method': method, 'params': params})
 
     def _in_scope(self, url: str) -> bool:
         try:
