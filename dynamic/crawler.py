@@ -59,10 +59,21 @@ class Crawler:
         except Exception as e:
             print(f"  [Crawler] Authentication failed: {e}")
 
+    # Pages that should never be visited — destructive or session-breaking
+    NEVER_VISIT = [
+        'setup.php', 'logout.php', 'phpinfo.php',
+    ]
+
     def _visit(self, url: str):
         if not self._in_scope(url):
             return
         clean_url = url.split('#')[0]
+
+        # Never visit destructive pages
+        if any(skip in clean_url for skip in self.NEVER_VISIT):
+            print(f"  [Crawler] Skipped (protected): {clean_url}")
+            return
+
         if clean_url in self.visited:
             return
         self.visited.add(clean_url)
