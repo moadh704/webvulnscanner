@@ -176,7 +176,7 @@ def main():
         if scan_manager.is_active('sqli'):
             from dynamic.sqli_injector import SQLiInjector
             sqli_findings = SQLiInjector(
-                crawler.session, scan_manager
+                crawler.session, scan_manager, auth=auth
             ).run(endpoints)
             all_findings.extend(sqli_findings)
 
