@@ -180,6 +180,14 @@ def main():
             ).run(endpoints)
             all_findings.extend(sqli_findings)
 
+        # ── XSS Injector ──────────────────────────────────────────────────────
+        if scan_manager.is_active('xss'):
+            from dynamic.xss_injector import XSSInjector
+            xss_findings = XSSInjector(
+                crawler.session, scan_manager, auth=auth
+            ).run(endpoints)
+            all_findings.extend(xss_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
