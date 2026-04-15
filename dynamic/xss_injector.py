@@ -22,6 +22,7 @@ SKIP_URLS = [
     'setup.php', 'logout.php', 'phpinfo.php',
     'security.php', 'upload.php', 'brute/',
     'captcha', 'javascript/', 'cryptography',
+    'instructions.php',
 ]
 
 

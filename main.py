@@ -188,6 +188,14 @@ def main():
             ).run(endpoints)
             all_findings.extend(xss_findings)
 
+        # ── CMDi Injector ─────────────────────────────────────────────────────
+        if scan_manager.is_active('cmdi'):
+            from dynamic.cmdi_injector import CMDiInjector
+            cmdi_findings = CMDiInjector(
+                crawler.session, scan_manager, auth=auth
+            ).run(endpoints)
+            all_findings.extend(cmdi_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
