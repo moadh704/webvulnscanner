@@ -224,6 +224,10 @@ def main():
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
+        from core.correlator import Correlator
+        all_findings = Correlator().correlate(all_findings)
+        print(f"[*] Correlation complete: "
+              f"{len(all_findings)} final finding(s).\n")
         # TODO: from core.correlator import correlate
         # all_findings = correlate(all_findings)
 
