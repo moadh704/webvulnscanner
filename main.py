@@ -204,6 +204,14 @@ def main():
             ).run(endpoints)
             all_findings.extend(traversal_findings)
 
+        # ── IDOR Enumerator ───────────────────────────────────────────────────
+        if scan_manager.is_active('idor'):
+            from dynamic.idor_enumerator import IDOREnumerator
+            idor_findings = IDOREnumerator(
+                crawler.session, scan_manager, auth=auth
+            ).run(endpoints)
+            all_findings.extend(idor_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
