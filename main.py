@@ -196,6 +196,14 @@ def main():
             ).run(endpoints)
             all_findings.extend(cmdi_findings)
 
+        # ── Traversal Injector ────────────────────────────────────────────────
+        if scan_manager.is_active('traversal'):
+            from dynamic.traversal_injector import TraversalInjector
+            traversal_findings = TraversalInjector(
+                crawler.session, scan_manager, auth=auth
+            ).run(endpoints)
+            all_findings.extend(traversal_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
