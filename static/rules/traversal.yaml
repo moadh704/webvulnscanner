@@ -1,0 +1,82 @@
+rules:
+
+  # ── PHP: include/require with user input ────────────────────────────────────
+  - id: php-traversal-include
+    patterns:
+      - pattern: include($_GET[$KEY]);
+      - pattern: include($_POST[$KEY]);
+      - pattern: include($PATH . $_GET[$KEY]);
+      - pattern: include($PATH . $_POST[$KEY]);
+    message: >
+      User input passed directly to include(). An attacker can traverse
+      the filesystem and include arbitrary files. Validate against a
+      whitelist of allowed filenames.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-require
+    patterns:
+      - pattern: require($_GET[$KEY]);
+      - pattern: require($_POST[$KEY]);
+      - pattern: require($PATH . $_GET[$KEY]);
+      - pattern: require($PATH . $_POST[$KEY]);
+    message: >
+      User input passed to require(). Validate against a whitelist
+      of allowed file names to prevent path traversal.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-file-get-contents
+    patterns:
+      - pattern: file_get_contents($_GET[$KEY]);
+      - pattern: file_get_contents($_POST[$KEY]);
+      - pattern: file_get_contents($BASE . $_GET[$KEY]);
+    message: >
+      User input used in file_get_contents() path. Sanitize the path
+      and validate it stays within the expected directory.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  # ── Python: open() with user input ──────────────────────────────────────────
+  - id: python-traversal-open
+    patterns:
+      - pattern: open(request.args.get($KEY))
+      - pattern: open(request.form.get($KEY))
+      - pattern: open($BASE + request.args.get($KEY))
+    message: >
+      User input used in file open() call. Use os.path.realpath() and
+      validate the resolved path is within the intended directory.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  # ── JavaScript/Node: fs.readFile with user input ────────────────────────────
+  - id: js-traversal-readfile
+    patterns:
+      - pattern: fs.readFile(req.$METHOD.$KEY, ...)
+      - pattern: fs.readFileSync(req.$METHOD.$KEY)
+      - pattern: fs.readFile($BASE + req.$METHOD.$KEY, ...)
+    message: >
+      User input used in fs.readFile() path. Sanitize and validate
+      the path to prevent directory traversal attacks.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal

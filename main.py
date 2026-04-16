@@ -134,10 +134,11 @@ def main():
     # ── Static Phase ──────────────────────────────────────────────────────────
     if mode in ("hybrid", "static") and config.SOURCE_DIR:
         print("[*] Starting Static Analysis...")
-        # TODO: from static.scanner import StaticScanner
-        # static_findings = StaticScanner(scan_manager).run(config.SOURCE_DIR)
-        # all_findings.extend(static_findings)
-        print("    [!] Static module not yet implemented — coming soon")
+        from static.scanner import StaticScanner
+        static_findings = StaticScanner(scan_manager).run(config.SOURCE_DIR)
+        all_findings.extend(static_findings)
+        print(f"[*] Static analysis found "
+              f"{len(static_findings)} candidate finding(s).\n")
 
     # ── Dynamic Phase ─────────────────────────────────────────────────────────
     if mode in ("hybrid", "dynamic", "dynamic-only") and config.TARGET_URL:

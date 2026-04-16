@@ -1,0 +1,94 @@
+rules:
+
+  # ── PHP: system/exec with user input ────────────────────────────────────────
+  - id: php-cmdi-system
+    patterns:
+      - pattern: system($_GET[$KEY]);
+      - pattern: system($_POST[$KEY]);
+      - pattern: system($CMD . $_GET[$KEY]);
+      - pattern: system($CMD . $_POST[$KEY]);
+    message: >
+      User input passed directly to system(). An attacker can inject
+      arbitrary OS commands. Use escapeshellarg() or avoid shell calls.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-exec
+    patterns:
+      - pattern: exec($_GET[$KEY]);
+      - pattern: exec($_POST[$KEY]);
+      - pattern: exec($CMD . $_GET[$KEY], $OUT);
+      - pattern: exec($CMD . $_POST[$KEY], $OUT);
+    message: >
+      User input passed to exec(). Use escapeshellarg() to sanitize
+      input or avoid executing OS commands from user data.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-shell-exec
+    patterns:
+      - pattern: shell_exec($_GET[$KEY]);
+      - pattern: shell_exec($_POST[$KEY]);
+      - pattern: shell_exec($CMD . $_GET[$KEY]);
+    message: >
+      User input passed to shell_exec(). Sanitize with escapeshellarg()
+      or use a safer alternative.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-passthru
+    patterns:
+      - pattern: passthru($_GET[$KEY]);
+      - pattern: passthru($_POST[$KEY]);
+      - pattern: passthru($CMD . $_GET[$KEY]);
+    message: >
+      User input passed to passthru(). This allows OS command injection.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  # ── Python: os.system / subprocess with user input ──────────────────────────
+  - id: python-cmdi-os-system
+    patterns:
+      - pattern: os.system(request.args.get($KEY))
+      - pattern: os.system(request.form.get($KEY))
+      - pattern: os.system($CMD + request.$METHOD.get($KEY))
+    message: >
+      User input passed to os.system(). Use subprocess with a list
+      of arguments and shell=False instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: python-cmdi-subprocess
+    patterns:
+      - pattern: subprocess.call($CMD + request.$METHOD.get($KEY), shell=True)
+      - pattern: subprocess.run($CMD + request.$METHOD.get($KEY), shell=True)
+      - pattern: subprocess.Popen($CMD + request.$METHOD.get($KEY), shell=True)
+    message: >
+      User input concatenated into subprocess call with shell=True.
+      Use shell=False and pass arguments as a list.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi

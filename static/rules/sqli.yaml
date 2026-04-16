@@ -1,0 +1,130 @@
+rules:
+
+  # ── PHP: direct user input in mysqli_query ──────────────────────────────────
+  - id: php-sqli-mysqli-get
+    patterns:
+      - pattern: mysqli_query($CONN, $QUERY . $_GET[$KEY])
+      - pattern: mysqli_query($CONN, $QUERY . $_POST[$KEY])
+      - pattern: mysqli_query($CONN, $QUERY . $_REQUEST[$KEY])
+    message: >
+      User input from $_GET/$_POST/$_REQUEST flows directly into
+      mysqli_query() without parameterization. Use prepared statements.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── PHP: two-step — variable assigned from GET/POST then used in query ───────
+  - id: php-sqli-taint-get
+    pattern: |
+      $VAR = $_GET[$KEY];
+      ...
+      mysqli_query($CONN, $QUERY);
+    message: >
+      User input from $_GET assigned to variable used in mysqli_query().
+      Use prepared statements with bound parameters.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  - id: php-sqli-taint-post
+    pattern: |
+      $VAR = $_POST[$KEY];
+      ...
+      mysqli_query($CONN, $QUERY);
+    message: >
+      User input from $_POST assigned to variable used in mysqli_query().
+      Use prepared statements with bound parameters.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  - id: php-sqli-taint-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      mysqli_query($CONN, $QUERY);
+    message: >
+      User input from $_REQUEST used in mysqli_query().
+      Use prepared statements with bound parameters.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: MEDIUM
+      vuln_type: sqli
+
+  # ── PHP: string interpolation with user input ────────────────────────────────
+  - id: php-sqli-interpolation-get
+    patterns:
+      - pattern: |
+          $VAR = $_GET[$KEY];
+          ...
+          $QUERY = "...$VAR...";
+      - pattern: |
+          $VAR = $_POST[$KEY];
+          ...
+          $QUERY = "...$VAR...";
+    message: >
+      User input interpolated into SQL query string.
+      Use prepared statements instead.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── PHP: mysql_query (legacy) ────────────────────────────────────────────────
+  - id: php-sqli-mysql-query
+    patterns:
+      - pattern: mysql_query($QUERY . $_GET[$KEY])
+      - pattern: mysql_query($QUERY . $_POST[$KEY])
+    message: >
+      User input flows directly into mysql_query(). Use PDO
+      prepared statements instead.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── Python: string concatenation in execute() ───────────────────────────────
+  - id: python-sqli-execute-concat
+    patterns:
+      - pattern: $CURSOR.execute("..." + request.$METHOD.get($KEY))
+      - pattern: $CURSOR.execute("SELECT ..." + $VAR)
+      - pattern: $CURSOR.execute(f"... {$VAR} ...")
+    message: >
+      User input concatenated directly into SQL execute() call.
+      Use parameterized queries: cursor.execute(query, (param,))
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── JavaScript/Node: string concatenation in db.query ───────────────────────
+  - id: js-sqli-query-concat
+    patterns:
+      - pattern: db.query("..." + req.$METHOD.$KEY)
+      - pattern: connection.query("SELECT ..." + $VAR)
+    message: >
+      User input concatenated into database query.
+      Use parameterized queries with placeholders.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
