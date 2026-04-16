@@ -231,13 +231,23 @@ def main():
         # TODO: from core.correlator import correlate
         # all_findings = correlate(all_findings)
 
+    # ── AI Enhancement ────────────────────────────────────────────────────────
+    if all_findings:
+        print("[*] Running AI Enhancement Layer...")
+        from core.ai_provider import AIEnhancer
+        all_findings = AIEnhancer().enhance(all_findings)
+        print()
+
     # ── Report ────────────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Generating Report...")
-        # TODO: from core.reporter import Reporter
-        # Reporter(all_findings, args.output).generate()
+        from core.reporter import Reporter
+        paths = Reporter(all_findings, args.output).generate()
+        print(f"\n[*] Reports saved:")
+        print(f"    HTML → {paths['html']}")
+        print(f"    JSON → {paths['json']}")
     else:
-        print("[*] No findings to report yet.")
+        print("[*] No findings to report.")
 
     print("\n[*] Scan complete.")
 

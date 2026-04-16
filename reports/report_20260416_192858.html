@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVulnScanner Report</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.6;
+        }
+
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, #1f3864, #2e5f9e);
+            color: white;
+            padding: 30px 40px;
+        }
+        .header h1 { font-size: 28px; font-weight: 700; }
+        .header p  { opacity: 0.85; margin-top: 4px; font-size: 14px; }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .meta-item {
+            background: rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .meta-item .label { font-size: 11px; opacity: 0.75; text-transform: uppercase; }
+        .meta-item .value { font-size: 15px; font-weight: 600; margin-top: 2px; }
+
+        /* ── Summary cards ───────────────────────────────────────────────── */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            padding: 24px 40px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .summary-card {
+            text-align: center;
+            padding: 16px;
+            border-radius: 10px;
+            border: 2px solid;
+        }
+        .summary-card .count { font-size: 36px; font-weight: 700; }
+        .summary-card .label { font-size: 12px; text-transform: uppercase; margin-top: 4px; }
+
+        .card-critical { border-color: #c0392b; color: #c0392b; background: #fdf2f2; }
+        .card-high     { border-color: #e67e22; color: #e67e22; background: #fef5ec; }
+        .card-medium   { border-color: #f39c12; color: #f39c12; background: #fefce8; }
+        .card-low      { border-color: #27ae60; color: #27ae60; background: #f0faf4; }
+        .card-total    { border-color: #2980b9; color: #2980b9; background: #eaf4fd; }
+
+        /* ── Type badges ─────────────────────────────────────────────────── */
+        .type-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .type-1 { background: #d4edda; color: #155724; }
+        .type-2 { background: #fff3cd; color: #856404; }
+        .type-3 { background: #cce5ff; color: #004085; }
+
+        /* ── Severity badges ─────────────────────────────────────────────── */
+        .sev-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .sev-critical { background: #c0392b; color: white; }
+        .sev-high     { background: #e67e22; color: white; }
+        .sev-medium   { background: #f39c12; color: white; }
+        .sev-low      { background: #27ae60; color: white; }
+
+        /* ── Findings ────────────────────────────────────────────────────── */
+        .findings { padding: 24px 40px; }
+        .findings h2 { font-size: 20px; color: #1f3864; margin-bottom: 16px; }
+
+        .finding-card {
+            background: white;
+            border-radius: 10px;
+            border-left: 5px solid;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .finding-card.critical { border-color: #c0392b; }
+        .finding-card.high     { border-color: #e67e22; }
+        .finding-card.medium   { border-color: #f39c12; }
+        .finding-card.low      { border-color: #27ae60; }
+
+        .finding-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            cursor: pointer;
+            background: #fafafa;
+        }
+        .finding-header h3 { flex: 1; font-size: 15px; color: #1a1a2e; }
+        .finding-header .confidence {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .finding-body { padding: 16px 18px; border-top: 1px solid #f0f0f0; }
+
+        .evidence-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .remediation-block {
+            background: #f0faf4;
+            border: 1px solid #b7dfc4;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .field-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 10px;
+            margin-bottom: 4px;
+        }
+
+        .dismissed {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        /* ── Footer ──────────────────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 12px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>🔍 WebVulnScanner — Security Report</h1>
+    <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
+    <div class="meta-grid">
+        <div class="meta-item">
+            <div class="label">Target URL</div>
+            <div class="value">http://localhost/dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Source Directory</div>
+            <div class="value">C:\xampp\htdocs\dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Scan Date</div>
+            <div class="value">2026-04-16 19:28:58</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">AI Provider</div>
+            <div class="value">none</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Total Findings</div>
+            <div class="value">15</div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary">
+    <div class="summary-card card-total">
+        <div class="count">15</div>
+        <div class="label">Total</div>
+    </div>
+    <div class="summary-card card-critical">
+        <div class="count">6</div>
+        <div class="label">Critical</div>
+    </div>
+    <div class="summary-card card-high">
+        <div class="count">9</div>
+        <div class="label">High</div>
+    </div>
+    <div class="summary-card card-medium">
+        <div class="count">0</div>
+        <div class="label">Medium</div>
+    </div>
+    <div class="summary-card card-low">
+        <div class="count">0</div>
+        <div class="label">Low</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#8e44ad;color:#8e44ad;background:#f5eef8;">
+        <div class="count">1</div>
+        <div class="label">Type 1 (Confirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#c0392b;color:#c0392b;background:#fdf2f2;">
+        <div class="count">0</div>
+        <div class="label">Type 2 (Unconfirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#16a085;color:#16a085;background:#eafaf1;">
+        <div class="count">14</div>
+        <div class="label">Type 3 (Runtime)</div>
+    </div>
+</div>
+
+<!-- Findings -->
+<div class="findings">
+    <h2>Findings (15)</h2>
+
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [SQLI]
+                http://localhost/dvwa/vulnerabilities/sqli/
+                 — param: <code>id</code>
+            </h3>
+            <span class="type-badge type-1">
+                Type 1
+                 ✓ Confirmed
+                
+            </span>
+            <span class="confidence">90%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20, Code: requires login</div>
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">DB error: 'you have an error in your sql syntax'</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>'</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Use prepared statements with parameterized queries. Never concatenate user input into SQL strings. See: https://owasp.org/www-community/attacks/SQL_Injection</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [CMDI]
+                http://localhost/dvwa/vulnerabilities/exec/
+                 — param: <code>ip</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Command output pattern detected: 'volume serial'</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>| dir</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Never pass user input to OS command functions. Use escapeshellarg() if shell calls are unavoidable. See: https://owasp.org/www-community/attacks/Command_Injection</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=include.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file1.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file2.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file3.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/exec/
+                 — param: <code>ip</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>"><script>alert(1)</script></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=include.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><img src=x onerror=alert(1)></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/sqli/
+                 — param: <code>id</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>'"><img src=x onerror=alert(1)></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/xss_r/
+                 — param: <code>name</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><script>alert('XSS')</script></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/xss_s/
+                 — param: <code>txtName</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><script>alert('XSS')</script></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/csp/
+                 — param: <code>include</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><script>alert('XSS')</script></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file1.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><img src=x onerror=alert(1)></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file2.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><img src=x onerror=alert(1)></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file3.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code><img src=x onerror=alert(1)></code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+
+    
+</div>
+
+<div class="footer">
+    Generated by WebVulnScanner v1.0 — Academic Security Research Tool
+</div>
+
+</body>
+</html>
