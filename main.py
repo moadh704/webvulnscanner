@@ -212,6 +212,14 @@ def main():
             ).run(endpoints)
             all_findings.extend(idor_findings)
 
+        # ── Header Inspector ──────────────────────────────────────────────────
+        if scan_manager.is_active('headers'):
+            from dynamic.header_inspector import HeaderInspector
+            header_findings = HeaderInspector(
+                crawler.session, scan_manager, auth=auth
+            ).run(endpoints)
+            all_findings.extend(header_findings)
+
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
         print("[*] Running Correlation Engine...")
