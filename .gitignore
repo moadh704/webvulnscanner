@@ -20,3 +20,5 @@ Desktop.ini
 # Editor folders
 .vscode/
 .idea/
+# API keys - never commit
+config.py

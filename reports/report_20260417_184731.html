@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVulnScanner Report</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.6;
+        }
+
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, #1f3864, #2e5f9e);
+            color: white;
+            padding: 30px 40px;
+        }
+        .header h1 { font-size: 28px; font-weight: 700; }
+        .header p  { opacity: 0.85; margin-top: 4px; font-size: 14px; }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .meta-item {
+            background: rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .meta-item .label { font-size: 11px; opacity: 0.75; text-transform: uppercase; }
+        .meta-item .value { font-size: 15px; font-weight: 600; margin-top: 2px; }
+
+        /* ── Summary cards ───────────────────────────────────────────────── */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            padding: 24px 40px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .summary-card {
+            text-align: center;
+            padding: 16px;
+            border-radius: 10px;
+            border: 2px solid;
+        }
+        .summary-card .count { font-size: 36px; font-weight: 700; }
+        .summary-card .label { font-size: 12px; text-transform: uppercase; margin-top: 4px; }
+
+        .card-critical { border-color: #c0392b; color: #c0392b; background: #fdf2f2; }
+        .card-high     { border-color: #e67e22; color: #e67e22; background: #fef5ec; }
+        .card-medium   { border-color: #f39c12; color: #f39c12; background: #fefce8; }
+        .card-low      { border-color: #27ae60; color: #27ae60; background: #f0faf4; }
+        .card-total    { border-color: #2980b9; color: #2980b9; background: #eaf4fd; }
+
+        /* ── Type badges ─────────────────────────────────────────────────── */
+        .type-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .type-1 { background: #d4edda; color: #155724; }
+        .type-2 { background: #fff3cd; color: #856404; }
+        .type-3 { background: #cce5ff; color: #004085; }
+
+        /* ── Severity badges ─────────────────────────────────────────────── */
+        .sev-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .sev-critical { background: #c0392b; color: white; }
+        .sev-high     { background: #e67e22; color: white; }
+        .sev-medium   { background: #f39c12; color: white; }
+        .sev-low      { background: #27ae60; color: white; }
+
+        /* ── Findings ────────────────────────────────────────────────────── */
+        .findings { padding: 24px 40px; }
+        .findings h2 { font-size: 20px; color: #1f3864; margin-bottom: 16px; }
+
+        .finding-card {
+            background: white;
+            border-radius: 10px;
+            border-left: 5px solid;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .finding-card.critical { border-color: #c0392b; }
+        .finding-card.high     { border-color: #e67e22; }
+        .finding-card.medium   { border-color: #f39c12; }
+        .finding-card.low      { border-color: #27ae60; }
+
+        .finding-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            cursor: pointer;
+            background: #fafafa;
+        }
+        .finding-header h3 { flex: 1; font-size: 15px; color: #1a1a2e; }
+        .finding-header .confidence {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .finding-body { padding: 16px 18px; border-top: 1px solid #f0f0f0; }
+
+        .evidence-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .remediation-block {
+            background: #f0faf4;
+            border: 1px solid #b7dfc4;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .field-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 10px;
+            margin-bottom: 4px;
+        }
+
+        .dismissed {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        /* ── Footer ──────────────────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 12px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>🔍 WebVulnScanner — Security Report</h1>
+    <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
+    <div class="meta-grid">
+        <div class="meta-item">
+            <div class="label">Target URL</div>
+            <div class="value">http://localhost/dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Source Directory</div>
+            <div class="value">C:\xampp\htdocs\dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Scan Date</div>
+            <div class="value">2026-04-17 18:47:31</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">AI Provider</div>
+            <div class="value">groq</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Total Findings</div>
+            <div class="value">15</div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary">
+    <div class="summary-card card-total">
+        <div class="count">15</div>
+        <div class="label">Total</div>
+    </div>
+    <div class="summary-card card-critical">
+        <div class="count">6</div>
+        <div class="label">Critical</div>
+    </div>
+    <div class="summary-card card-high">
+        <div class="count">9</div>
+        <div class="label">High</div>
+    </div>
+    <div class="summary-card card-medium">
+        <div class="count">0</div>
+        <div class="label">Medium</div>
+    </div>
+    <div class="summary-card card-low">
+        <div class="count">0</div>
+        <div class="label">Low</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#8e44ad;color:#8e44ad;background:#f5eef8;">
+        <div class="count">1</div>
+        <div class="label">Type 1 (Confirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#c0392b;color:#c0392b;background:#fdf2f2;">
+        <div class="count">0</div>
+        <div class="label">Type 2 (Unconfirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#16a085;color:#16a085;background:#eafaf1;">
+        <div class="count">14</div>
+        <div class="label">Type 3 (Runtime)</div>
+    </div>
+</div>
+
+<!-- Findings -->
+<div class="findings">
+    <h2>Findings (15)</h2>
+
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [SQLI]
+                http://localhost/dvwa/vulnerabilities/sqli/
+                 — param: <code>id</code>
+            </h3>
+            <span class="type-badge type-1">
+                Type 1
+                 ✓ Confirmed
+                
+            </span>
+            <span class="confidence">90%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20, Code: requires login</div>
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&#39;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the SQLi vulnerability, the application should use prepared statements with parameterized queries to separate code from user input. For example, the vulnerable line in `login.php` can be replaced with a prepared statement using PDO: `$stmt = $pdo-&gt;prepare(&#39;SELECT * FROM users WHERE id = :id&#39;); $stmt-&gt;bindParam(&#39;:id&#39;, $id);`. By doing so, the application can prevent malicious SQL injection and ensure the security of user data.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [CMDI]
+                http://localhost/dvwa/vulnerabilities/exec/
+                 — param: <code>ip</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Command output pattern detected: &#39;volume serial&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>| dir</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the CMDi vulnerability, validate and sanitize the user-input &#39;ip&#39; parameter to prevent injection of malicious commands. A concrete code-level fix example is to use a whitelist approach, such as using a regular expression to ensure the input only contains valid IP address characters, e.g., `if (preg_match(&#39;/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/&#39;, $_GET[&#39;ip&#39;])) { ... }`. By doing so, you can prevent unauthorized command execution and mitigate the injection risk.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=include.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the traversal vulnerability, validate and sanitize the &#39;page&#39; parameter to prevent directory traversal attacks. For example, in PHP, use a whitelist approach to only allow specific pages to be included, such as `if (in_array($page, array(&#39;file1&#39;, &#39;file2&#39;))) { include($page . &#39;.php&#39;); }`. This ensures that only authorized files can be included, preventing access to sensitive files like `include.php`.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file1.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the traversal vulnerability, validate and sanitize the &#34;page&#34; parameter to prevent unauthorized file access. A code-level fix example would be to use a whitelist approach, such as `if (in_array($_GET[&#39;page&#39;], array(&#39;file1.php&#39;, &#39;file2.php&#39;))) { include $_GET[&#39;page&#39;]; }`. This ensures that only authorized files can be included, preventing sensitive file content disclosure.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file2.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the traversal vulnerability, validate and sanitize the &#39;page&#39; parameter to prevent directory traversal attacks. A concrete code-level fix example is to use a whitelist approach, such as `if (in_array($_GET[&#39;page&#39;], array(&#39;file1.php&#39;, &#39;file2.php&#39;))) { include $_GET[&#39;page&#39;]; }`. Additionally, consider using a framework or library that provides built-in protection against path traversal attacks, such as PHP&#39;s `basename()` function to ensure only expected file names are included.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [TRAVERSAL]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file3.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A01:2021 - Broken Access Control</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>../../../../etc/passwd</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the traversal vulnerability, validate and sanitize the &#39;page&#39; parameter to prevent unauthorized access to sensitive files. A concrete code-level fix example is to use a whitelist approach, such as `if (in_array($_GET[&#39;page&#39;], array(&#39;file1.php&#39;, &#39;file2.php&#39;, &#39;file3.php&#39;)))` to ensure only allowed files are included. Additionally, consider using a more secure approach like using a database or a configuration file to map the &#39;page&#39; parameter to the actual file path, rather than directly including user-inputted files.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/exec/
+                 — param: <code>ip</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and encode user input for the &#34;ip&#34; parameter to prevent malicious code injection. A concrete code-level fix example is to use the `htmlspecialchars()` function in PHP, e.g., `echo htmlspecialchars($_GET[&#39;ip&#39;]);`. By encoding the user input, the payload will be rendered harmless, preventing the XSS attack.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=include.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and sanitize the &#39;page&#39; parameter to prevent user-input data from being injected into the response. A concrete code-level fix example is to use PHP&#39;s `htmlspecialchars()` function, such as `$page = htmlspecialchars($_GET[&#39;page&#39;], ENT_QUOTES, &#39;UTF-8&#39;);`. Additionally, consider using a whitelisting approach to only allow specific, expected values for the &#39;page&#39; parameter, to further restrict potential attacks.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/sqli/
+                 — param: <code>id</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&#39;&#34;&gt;&lt;img src=x onerror=alert(1)&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and encode user input for the &#39;id&#39; parameter to prevent malicious payloads from being reflected in the response body. A concrete code-level fix example is to use PHP&#39;s `htmlspecialchars()` function, such as `echo htmlspecialchars($_GET[&#39;id&#39;]);`, to encode the user input. By doing so, any special characters in the input will be converted to their corresponding HTML entities, preventing the execution of malicious scripts.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/xss_r/
+                 — param: <code>name</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, input validation and output encoding should be implemented for the &#39;name&#39; parameter. A concrete code-level fix example is to use HTML entities encoding, such as `htmlspecialchars($name)` in PHP, to ensure user input is properly encoded before being reflected in the response body. For example, `echo &#34;Hello, &#34; . htmlspecialchars($_GET[&#39;name&#39;]);` can be used to prevent XSS attacks.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/xss_s/
+                 — param: <code>txtName</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, the application should encode user input, such as the `txtName` parameter, before reflecting it in the response body. A concrete code-level fix example is to use the `htmlspecialchars()` function in PHP, for instance: `echo htmlspecialchars($_GET[&#39;txtName&#39;], ENT_QUOTES, &#39;UTF-8&#39;);`. By doing so, the application ensures that any malicious input is properly escaped, preventing XSS attacks.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/csp/
+                 — param: <code>include</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, encode user-input data using `htmlspecialchars()` function in PHP to prevent malicious code execution. For example, modify the code to use `echo htmlspecialchars($_GET[&#39;include&#39;], ENT_QUOTES, &#39;UTF-8&#39;);` to ensure user input is properly sanitized. This will prevent the payload from being reflected unencoded in the response body, mitigating the XSS vulnerability.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file1.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and sanitize the &#34;page&#34; parameter to prevent malicious input. A code-level fix example is to use PHP&#39;s `htmlspecialchars` function to encode the user input, such as `echo htmlspecialchars($_GET[&#39;page&#39;]);`. Additionally, consider implementing a whitelist of allowed pages to prevent unauthorized file inclusion, for example, `if (in_array($_GET[&#39;page&#39;], array(&#39;file1.php&#39;, &#39;file2.php&#39;))) { include $_GET[&#39;page&#39;]; }`.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file2.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and sanitize the &#39;page&#39; parameter to prevent malicious input. A concrete code-level fix example is to use PHP&#39;s `htmlspecialchars()` function to encode the user input, such as `$page = htmlspecialchars($_GET[&#39;page&#39;]);`. Additionally, consider using a whitelist approach to only allow specific, expected values for the &#39;page&#39; parameter, such as using an array of allowed pages and checking if the input is in that array before including the file.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [XSS]
+                http://localhost/dvwa/vulnerabilities/fi/?page=file3.php
+                 — param: <code>page</code>
+            </h3>
+            <span class="type-badge type-3">
+                Type 3
+                 ◎ Runtime
+                
+            </span>
+            <span class="confidence">65%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the XSS vulnerability, validate and sanitize user input for the &#34;page&#34; parameter using techniques such as whitelisting and HTML encoding. A concrete code-level fix example is to use PHP&#39;s `htmlspecialchars()` function, e.g., `$page = htmlspecialchars($_GET[&#39;page&#39;]);`. By doing so, any malicious payload will be encoded and prevented from being executed, thereby mitigating the XSS risk.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+
+    
+</div>
+
+<div class="footer">
+    Generated by WebVulnScanner v1.0 — Academic Security Research Tool
+</div>
+
+</body>
+</html>
