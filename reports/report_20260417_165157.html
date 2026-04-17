@@ -183,11 +183,11 @@
         </div>
         <div class="meta-item">
             <div class="label">Scan Date</div>
-            <div class="value">2026-04-16 19:28:58</div>
+            <div class="value">2026-04-17 16:51:57</div>
         </div>
         <div class="meta-item">
             <div class="label">AI Provider</div>
-            <div class="value">none</div>
+            <div class="value">gemini</div>
         </div>
         <div class="meta-item">
             <div class="label">Total Findings</div>
@@ -268,10 +268,10 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">DB error: 'you have an error in your sql syntax'</div>
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code>'</code>
+                Payload: <code>&#39;</code>
             </div>
             
             
@@ -280,7 +280,14 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Use prepared statements with parameterized queries. Never concatenate user input into SQL strings. See: https://owasp.org/www-community/attacks/SQL_Injection</div>
+            <div class="remediation-block">To remediate this vulnerability, replace direct string concatenation in SQL queries with prepared statements and parameterized queries. This approach ensures the database treats the `id` parameter strictly as data rather than executable code, effectively neutralizing injection attempts.
+
+**Code-level fix (using PDO):**
+```php
+$stmt = $pdo-&gt;prepare(&#39;SELECT first_name, last_name FROM users WHERE user_id = ?&#39;);
+$stmt-&gt;execute([$_GET[&#39;id&#39;]]);
+$results = $stmt-&gt;fetchAll();
+```</div>
             
 
             
@@ -316,7 +323,7 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">Command output pattern detected: 'volume serial'</div>
+            <div class="evidence-block">Command output pattern detected: &#39;volume serial&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
                 Payload: <code>| dir</code>
@@ -328,7 +335,14 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Never pass user input to OS command functions. Use escapeshellarg() if shell calls are unavoidable. See: https://owasp.org/www-community/attacks/Command_Injection</div>
+            <div class="remediation-block">To remediate this vulnerability, avoid direct shell execution by using built-in language functions or strictly validating the `$ip` parameter against a dedicated allowlist or regex. A concrete fix involves verifying that the input is a valid IP address and sanitizing the variable to prevent command chaining.
+
+**Code-level fix:**
+```php
+if (filter_var($ip, FILTER_VALIDATE_IP)) { 
+    system(&#34;ping -c 4 &#34; . escapeshellarg($ip)); 
+}
+```</div>
             
 
             
@@ -364,7 +378,7 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
                 Payload: <code>../../../../etc/passwd</code>
@@ -376,7 +390,14 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            <div class="remediation-block">To remediate this vulnerability, implement a strict allow-list that maps user-provided keys to specific, authorized filenames instead of passing raw input to file functions.
+
+**Code-level fix:**
+```php
+$allowed_pages = [&#39;include.php&#39; =&gt; &#39;include.php&#39;, &#39;home&#39; =&gt; &#39;home.php&#39;];
+include($allowed_pages[$_GET[&#39;page&#39;]] ?? &#39;error.php&#39;);
+```
+This approach prevents arbitrary directory traversal by ensuring only predefined, safe files can be accessed by the application.</div>
             
 
             
@@ -412,7 +433,7 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
                 Payload: <code>../../../../etc/passwd</code>
@@ -424,7 +445,14 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            <div class="remediation-block">To remediate this vulnerability, validate the `page` parameter against a strict allowlist of permitted filenames and use the `basename()` function to strip any directory traversal sequences. This ensures that the application only includes authorized files and prevents attackers from accessing arbitrary paths on the server.
+
+**Code-level fix:**
+```php
+$allowed = [&#39;file1.php&#39;, &#39;file2.php&#39;, &#39;file3.php&#39;];
+$page = basename($_GET[&#39;page&#39;]);
+if (in_array($page, $allowed)) { include($page); }
+```</div>
             
 
             
@@ -460,7 +488,7 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
                 Payload: <code>../../../../etc/passwd</code>
@@ -472,7 +500,10 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            <div class="remediation-block">To remediate this path traversal vulnerability, implement a strict whitelist of permitted filenames to ensure only authorized files can be processed by the inclusion logic. If dynamic loading is necessary, use `basename()` to strip directory paths and verify the file&#39;s existence within a predefined, restricted directory.
+
+**Fix:**
+`if (in_array($_GET[&#39;page&#39;], [&#39;file1.php&#39;, &#39;file2.php&#39;])) { include($_GET[&#39;page&#39;]); } else { die(&#39;Access Denied&#39;); }`</div>
             
 
             
@@ -508,7 +539,7 @@
 
             
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">Sensitive file content detected: 'for inclusion (include_path='</div>
+            <div class="evidence-block">Sensitive file content detected: &#39;for inclusion (include_path=&#39;</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
                 Payload: <code>../../../../etc/passwd</code>
@@ -520,7 +551,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Validate file paths against a whitelist of allowed values. Use realpath() and verify the result stays within bounds. See: https://owasp.org/www-community/attacks/Path_Traversal</div>
+            <div class="remediation-block">To remediate this vulnerability, implement a strict whitelist of allowed filenames to ensure only authorized files can be processed. For example, use: `$allowed = [&#39;file1.php&#39;, &#39;file2.php&#39;, &#39;file3.php&#39;]; if (in_array($_GET[&#39;page&#39;], $allowed)) { include($_GET[&#39;page&#39;]); }`. This approach prevents directory traversal by rejecting any input that does not exactly match the predefined list of safe files.</div>
             
 
             
@@ -559,7 +590,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code>"><script>alert(1)</script></code>
+                Payload: <code>&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;</code>
             </div>
             
             
@@ -568,7 +599,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -607,7 +638,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><img src=x onerror=alert(1)></code>
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
             </div>
             
             
@@ -616,7 +647,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -655,7 +686,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code>'"><img src=x onerror=alert(1)></code>
+                Payload: <code>&#39;&#34;&gt;&lt;img src=x onerror=alert(1)&gt;</code>
             </div>
             
             
@@ -664,7 +695,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -703,7 +734,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><script>alert('XSS')</script></code>
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
             </div>
             
             
@@ -712,7 +743,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -751,7 +782,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><script>alert('XSS')</script></code>
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
             </div>
             
             
@@ -760,7 +791,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -799,7 +830,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><script>alert('XSS')</script></code>
+                Payload: <code>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code>
             </div>
             
             
@@ -808,7 +839,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -847,7 +878,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><img src=x onerror=alert(1)></code>
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
             </div>
             
             
@@ -856,7 +887,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -895,7 +926,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><img src=x onerror=alert(1)></code>
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
             </div>
             
             
@@ -904,7 +935,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             
@@ -943,7 +974,7 @@
             <div class="evidence-block">Payload reflected unencoded in response body</div>
             
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code><img src=x onerror=alert(1)></code>
+                Payload: <code>&lt;img src=x onerror=alert(1)&gt;</code>
             </div>
             
             
@@ -952,7 +983,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">Encode all user input before rendering in HTML. Use htmlspecialchars() in PHP or equivalent. See: https://owasp.org/www-community/attacks/xss/</div>
+            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
             
 
             

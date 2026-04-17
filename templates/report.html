@@ -261,31 +261,31 @@
         <div class="finding-body">
 
             <div class="field-label">OWASP Category</div>
-            <div>{{ f.owasp }}</div>
+            <div>{{ f.owasp | e }}</div>
 
             {% if f.evidence_static %}
             <div class="field-label">Static Evidence</div>
-            <div class="evidence-block">{{ f.evidence_static }}</div>
+            <div class="evidence-block">{{ f.evidence_static | e }}</div>
             {% endif %}
 
             {% if f.evidence_dynamic %}
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">{{ f.evidence_dynamic }}</div>
+            <div class="evidence-block">{{ f.evidence_dynamic | e }}</div>
             {% if f.payload %}
             <div style="font-size:12px;color:#666;margin-top:4px;">
-                Payload: <code>{{ f.payload }}</code>
+                Payload: <code>{{ f.payload | e }}</code>
             </div>
             {% endif %}
             {% endif %}
 
             {% if f.ai_note %}
             <div class="field-label">AI Review Note</div>
-            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">{{ f.ai_note }}</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">{{ f.ai_note | e }}</div>
             {% endif %}
 
             {% if f.remediation %}
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">{{ f.remediation }}</div>
+            <div class="remediation-block">{{ f.remediation | e }}</div>
             {% endif %}
 
             {% if dismissed %}

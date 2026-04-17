@@ -21,31 +21,67 @@ class AIProvider:
 # ── Gemini Provider (default) ─────────────────────────────────────────────────
 
 class GeminiProvider(AIProvider):
-    """Default — Google Gemini 1.5 Flash (free tier at aistudio.google.com)."""
+    """Default — Google Gemini 2.0 Flash (free tier at aistudio.google.com)."""
 
     def __init__(self):
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=config.GEMINI_API_KEY)
-            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            from google import genai
+            self.client = genai.Client(api_key=config.GEMINI_API_KEY)
+            self.model  = "gemini-flash-latest"
         except Exception as e:
             raise RuntimeError(f"Gemini init failed: {e}. "
                                f"Check GEMINI_API_KEY in config.py")
 
     def review_finding(self, prompt: str) -> str:
         try:
-            return self.model.generate_content(prompt).text
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt
+            )
+            return response.text
         except Exception as e:
             return f"REAL (Gemini error: {e})"
 
     def generate_remediation(self, prompt: str) -> str:
         try:
-            return self.model.generate_content(prompt).text
+            response = self.client.models.generate_content(
+                model=self.model, contents=prompt
+            )
+            return response.text
         except Exception as e:
+            print(f"  [AI] Gemini error: {e}")
             return "See OWASP guidelines for remediation guidance."
 
 
-# ── Ollama Provider (offline) ─────────────────────────────────────────────────
+# ── Groq Provider (free, high limits) ────────────────────────────────────────
+
+class GroqProvider(AIProvider):
+    """Free provider via Groq API — Llama 3.3 70B, 14400 requests/day free."""
+
+    def __init__(self):
+        try:
+            from groq import Groq
+            self.client = Groq(api_key=config.GROQ_API_KEY)
+            self.model  = "llama-3.3-70b-versatile"
+        except Exception as e:
+            raise RuntimeError(f"Groq init failed: {e}. "
+                               f"Check GROQ_API_KEY in config.py")
+
+    def _call(self, prompt: str) -> str:
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"See OWASP guidelines for remediation guidance."
+
+    def review_finding(self, prompt: str) -> str:
+        return self._call(prompt)
+
+    def generate_remediation(self, prompt: str) -> str:
+        return self._call(prompt)
 
 class OllamaProvider(AIProvider):
     """Free local provider via Ollama (offline, no API key required)."""
@@ -101,6 +137,7 @@ def get_provider() -> AIProvider:
     """
     registry = {
         "gemini" : GeminiProvider,
+        "groq"   : GroqProvider,
         "ollama" : OllamaProvider,
         "none"   : NoAIProvider,
     }
@@ -141,7 +178,8 @@ class AIEnhancer:
 
         print(f"  [AI] Processing {len(findings)} finding(s)...")
 
-        for finding in findings:
+        for i, finding in enumerate(findings):
+
             # Step 1: Review Type 2 findings for false positives
             if finding.get('finding_type') == 2:
                 finding = self._review_false_positive(finding)

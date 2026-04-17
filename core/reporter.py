@@ -40,13 +40,16 @@ class Reporter:
     def _generate_html(self, path: str):
         """Render Jinja2 template with findings data."""
         try:
-            from jinja2 import Environment, FileSystemLoader
+            from jinja2 import Environment, FileSystemLoader, select_autoescape
 
             template_dir = os.path.join(
                 os.path.dirname(os.path.dirname(__file__)),
                 'templates'
             )
-            env      = Environment(loader=FileSystemLoader(template_dir))
+            env      = Environment(
+                loader=FileSystemLoader(template_dir),
+                autoescape=select_autoescape(['html'])
+            )
             template = env.get_template('report.html')
 
             html = template.render(

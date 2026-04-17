@@ -14,11 +14,11 @@ REQUEST_HEADERS   = {
 
 # ── AI Enhancement Layer ──────────────────────────────────────────────────────
 # Options: "gemini" (default, free) | "ollama" (offline) | "none" (disabled)
-AI_PROVIDER    = "none"      # set to "gemini" when you have an API key
+AI_PROVIDER    = "groq"      # set to "gemini" when you have an API key
 
-GEMINI_API_KEY = "your_key_here"   # free at aistudio.google.com
+GEMINI_API_KEY = ""   # free at aistudio.google.com
 OLLAMA_MODEL   = "codellama"       # only used if AI_PROVIDER = "ollama"
 OLLAMA_URL     = "http://localhost:11434/api/generate"
-
+GROQ_API_KEY = ""
 # ── Report settings ───────────────────────────────────────────────────────────
 REPORT_OUTPUT_DIR = "reports"
