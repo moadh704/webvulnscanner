@@ -47,10 +47,10 @@ class Crawler:
             self._authenticate()
         print(f"  [Crawler] Starting crawl on: {self.base_url}")
 
-        # Test connectivity first
+        # Test connectivity with configured timeout
         try:
             self.session.get(
-                self.base_url, timeout=config.REQUEST_TIMEOUT,
+                self.base_url, timeout=max(config.REQUEST_TIMEOUT, 20),
                 allow_redirects=True
             )
         except Exception as e:
