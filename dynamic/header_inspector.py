@@ -104,17 +104,22 @@ class HeaderInspector:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _get_base_url(self, endpoints: list) -> str:
-        """Extract the base application URL from the endpoint list."""
-        from urllib.parse import urlparse
-        first_url = endpoints[0]['url']
-        parsed    = urlparse(first_url)
-        # Return scheme + host + first path segment
-        parts = parsed.path.split('/')
-        if len(parts) >= 2:
-            base_path = '/' + parts[1]  # e.g. /dvwa
-        else:
-            base_path = '/'
-        return f"{parsed.scheme}://{parsed.netloc}{base_path}"
+        """Extract the base application URL from config or endpoints."""
+        try:
+            # Always use config TARGET_URL root for headers
+            from urllib.parse import urlparse
+            parsed = urlparse(config.TARGET_URL)
+            return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            from urllib.parse import urlparse
+            first_url = endpoints[0]['url']
+            parsed    = urlparse(first_url)
+            parts = parsed.path.split('/')
+            if len(parts) >= 2:
+                base_path = '/' + parts[1]
+            else:
+                base_path = '/'
+            return f"{parsed.scheme}://{parsed.netloc}{base_path}"
 
     def _make_finding(self, url, header,
                       risk, severity) -> dict:

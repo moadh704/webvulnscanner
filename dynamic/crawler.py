@@ -1,16 +1,36 @@
 # ── dynamic/crawler.py ───────────────────────────────────────────────────────
 
+import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import config
 
+# ── Common REST API paths to probe ────────────────────────────────────────────
+API_WORDLIST = [
+    # Generic REST patterns
+    '/api/users', '/api/user', '/api/products', '/api/product',
+    '/api/orders', '/api/order', '/api/items', '/api/item',
+    '/api/accounts', '/api/account', '/api/admin', '/api/profile',
+    '/api/v1/users', '/api/v1/products', '/api/v2/users',
+    '/rest/user', '/rest/users', '/rest/products',
+    # Juice Shop specific
+    '/api/Users', '/api/Products', '/api/BasketItems',
+    '/rest/user/whoami', '/rest/products/search',
+    # Common admin/debug endpoints
+    '/api/health', '/api/status', '/api/info',
+]
+
 
 class Crawler:
     """
     Crawls the target web application and builds a list of endpoints.
-    Supports form-based authentication for protected apps like DVWA.
+    Supports:
+    - Form-based authentication (DVWA)
+    - robots.txt / sitemap.xml parsing
+    - REST API discovery via common path fuzzing
+    - JSON response detection
     """
 
     def __init__(self, base_url: str, auth: dict = None):
@@ -27,6 +47,11 @@ class Crawler:
             self._authenticate()
         print(f"  [Crawler] Starting crawl on: {self.base_url}")
         self._visit(self.base_url)
+
+        # ── REST API discovery ─────────────────────────────────────────────
+        self._discover_from_robots()
+        self._discover_api_endpoints()
+
         print(f"  [Crawler] Done. Found {len(self.endpoints)} endpoint(s).")
         return self.endpoints
 
@@ -90,6 +115,11 @@ class Crawler:
             print(f"  [Crawler] Skipped (auth redirect): {url}")
             return
         print(f"  [Crawler] Visited: {url} [{response.status_code}]")
+
+        # Check if JSON response — it's an API endpoint
+        if self._is_json(response):
+            self._add_api_endpoint(url)
+
         soup = BeautifulSoup(response.text, 'html.parser')
         parsed = urlparse(url)
         if parsed.query:
@@ -100,6 +130,130 @@ class Crawler:
         for tag in soup.find_all('a', href=True):
             full_url = urljoin(url, tag['href'].strip())
             self._visit(full_url)
+
+    # ── REST API Discovery ────────────────────────────────────────────────────
+
+    def _discover_from_robots(self):
+        """Parse robots.txt and sitemap.xml for hidden paths."""
+        base = self._get_root_url()
+
+        # robots.txt
+        try:
+            r = self.session.get(
+                f"{base}/robots.txt",
+                timeout=config.REQUEST_TIMEOUT
+            )
+            if r.status_code == 200 and 'html' not in r.headers.get(
+                    'content-type', ''):
+                for line in r.text.splitlines():
+                    if line.lower().startswith(('disallow:', 'allow:')):
+                        path = line.split(':', 1)[-1].strip()
+                        if path and path != '/':
+                            url = f"{base}{path}"
+                            if self._in_scope(url):
+                                self._probe_api_path(url)
+        except Exception:
+            pass
+
+        # sitemap.xml
+        try:
+            r = self.session.get(
+                f"{base}/sitemap.xml",
+                timeout=config.REQUEST_TIMEOUT
+            )
+            if r.status_code == 200:
+                soup = BeautifulSoup(r.text, 'xml')
+                for loc in soup.find_all('loc'):
+                    url = loc.text.strip()
+                    if self._in_scope(url):
+                        self._probe_api_path(url)
+        except Exception:
+            pass
+
+    def _discover_api_endpoints(self):
+        """Probe common REST API paths and add any that respond with JSON."""
+        base = self._get_root_url()
+        found = 0
+
+        for path in API_WORDLIST:
+            url = f"{base}{path}"
+            if url in self.visited:
+                continue
+            result = self._probe_api_path(url)
+            if result:
+                found += 1
+
+        if found > 0:
+            print(f"  [Crawler] API discovery: found {found} "
+                  f"REST endpoint(s).")
+
+    def _probe_api_path(self, url: str) -> bool:
+        """
+        Probe a single URL. If it returns JSON or 200,
+        add it as an endpoint. Returns True if found.
+        """
+        try:
+            r = self.session.get(
+                url, timeout=config.REQUEST_TIMEOUT,
+                allow_redirects=True
+            )
+            self.visited.add(url)
+
+            if r.status_code in (200, 201) and len(r.text) > 10:
+                if self._is_json(r):
+                    print(f"  [Crawler] API endpoint: {url} "
+                          f"[{r.status_code}] (JSON)")
+                    self._add_api_endpoint(url)
+                    # Try probing /{id} variants
+                    for id_val in ['1', '2']:
+                        id_url = f"{url.rstrip('/')}/{id_val}"
+                        try:
+                            r2 = self.session.get(
+                                id_url,
+                                timeout=config.REQUEST_TIMEOUT
+                            )
+                            if r2.status_code == 200 and self._is_json(r2):
+                                self._add_api_endpoint(id_url)
+                        except Exception:
+                            pass
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def _add_api_endpoint(self, url: str):
+        """Add a REST API endpoint with id parameter."""
+        clean_url = url.split('#')[0]
+        # Extract id from URL path if present
+        parts = urlparse(clean_url).path.rstrip('/').split('/')
+        last  = parts[-1]
+
+        if last.isdigit():
+            # URL like /api/Users/1 — parameter is in path
+            base_url = clean_url.rsplit('/', 1)[0]
+            params   = {'id': last}
+        else:
+            params   = {}
+
+        self._add_endpoint(clean_url, 'GET', params)
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _is_json(self, response) -> bool:
+        """Check if response contains JSON data."""
+        content_type = response.headers.get('content-type', '')
+        if 'json' in content_type:
+            return True
+        try:
+            json.loads(response.text)
+            return True
+        except Exception:
+            return False
+
+    def _get_root_url(self) -> str:
+        """Get the root URL (scheme + host) of the target."""
+        parsed = urlparse(self.base_url)
+        return f"{parsed.scheme}://{parsed.netloc}"
 
     def _process_form(self, page_url: str, form):
         action = form.get('action', '')
@@ -116,13 +270,17 @@ class Crawler:
             self._add_endpoint(action_url, method, params)
 
     def _add_endpoint(self, url: str, method: str, params: dict):
-        clean_url = url.split('#')[0]   # strip fragment — never sent to server
+        clean_url = url.split('#')[0]
         if not clean_url:
             return
         key = (clean_url, method, frozenset(params.keys()))
         if key not in {(e['url'], e['method'], frozenset(e['params'].keys()))
                        for e in self.endpoints}:
-            self.endpoints.append({'url': clean_url, 'method': method, 'params': params})
+            self.endpoints.append({
+                'url'    : clean_url,
+                'method' : method,
+                'params' : params
+            })
 
     def _in_scope(self, url: str) -> bool:
         try:
@@ -130,14 +288,11 @@ class Crawler:
             base_parsed = urlparse(self.base_url)
             if parsed.scheme not in ('http', 'https'):
                 return False
-            # Domain must match
             if parsed.netloc != self.domain and \
                not parsed.netloc.endswith('.' + self.domain):
                 return False
-            # Get base directory (strip filename if present)
             base_path = base_parsed.path.rstrip('/')
             if '.' in base_path.split('/')[-1]:
-                # Last segment is a file — use its directory
                 base_path = '/'.join(base_path.split('/')[:-1])
             base_path = base_path.rstrip('/') + '/'
             if base_path and base_path != '/' and \

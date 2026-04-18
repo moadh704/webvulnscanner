@@ -183,7 +183,7 @@
         </div>
         <div class="meta-item">
             <div class="label">Scan Date</div>
-            <div class="value">2026-04-18 17:32:31</div>
+            <div class="value">2026-04-18 18:00:05</div>
         </div>
         <div class="meta-item">
             <div class="label">AI Provider</div>
@@ -277,7 +277,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
+            <div class="remediation-block">To remediate the idor vulnerability, ensure that proper authorization checks are in place for the `/api/Products/{id}` endpoint. A concrete code-level fix example would be to add a middleware function that checks if the authenticated user has access to the requested product ID, e.g., `if (authenticatedUser.id === productId) { return next(); } else { return res.status(403).send(&#39;Forbidden&#39;); }`. Implementing role-based access control (RBAC) or attribute-based access control (ABAC) can also help restrict access to sensitive data.</div>
             
 
             
@@ -325,7 +325,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
+            <div class="remediation-block">To remediate the Content-Security-Policy header vulnerability, add the &#39;Content-Security-Policy&#39; header to your server&#39;s response with a suitable policy, such as &#39;default-src &#39;self&#39;; script-src &#39;self&#39; https://trusted-scripts.com;&#39;. For example, in a Node.js Express server, you can set this header using `res.setHeader(&#39;Content-Security-Policy&#39;, &#34;default-src &#39;self&#39;; script-src &#39;self&#39; https://trusted-scripts.com;&#34;)`. This will mitigate XSS risks by only allowing scripts from trusted sources to be executed.</div>
             
 
             
@@ -373,7 +373,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
+            <div class="remediation-block">To remediate the missing Strict-Transport-Security header, set the `Strict-Transport-Security` header in your server configuration to enforce HTTPS. For example, in Node.js with Express, you can add the header using `app.use helmet()` and then `app.use(helmet.hsts())`. Alternatively, you can manually set the header with `res.setHeader(&#39;Strict-Transport-Security&#39;, &#39;max-age=31536000; includeSubDomains&#39;)`.</div>
             
 
             
@@ -421,7 +421,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
+            <div class="remediation-block">To remediate the Referrer-Policy header vulnerability, set the &#39;Referrer-Policy&#39; header in your server configuration to a suitable value such as &#39;same-origin&#39; or &#39;no-referrer&#39;. This can be achieved in a Node.js application using Express.js by adding the line `app.use((req, res, next) =&gt; { res.setHeader(&#34;Referrer-Policy&#34;, &#34;same-origin&#34;); next(); });`. By doing so, you prevent URL data from being leaked to third parties via the Referer header.</div>
             
 
             
@@ -469,7 +469,7 @@
 
             
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">See OWASP guidelines for remediation guidance.</div>
+            <div class="remediation-block">To remediate the Permissions-Policy header vulnerability, add the &#39;Permissions-Policy&#39; header to the server&#39;s response with the desired permissions, such as &#39;Permissions-Policy: geolocation=(), microphone=()&#39;. This can be achieved in a Node.js server using the Express framework by adding the following code: `res.setHeader(&#34;Permissions-Policy&#34;, &#34;geolocation=(), microphone=()&#34;);`. By doing so, you define restrictions on browser features, enhancing the security of your application.</div>
             
 
             

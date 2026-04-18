@@ -165,10 +165,12 @@ def main():
                 'extra_fields'   : {'Login': 'Login'}
             }
 
-        # Always crawl from index.php so relative links resolve correctly
+        # Determine starting crawl URL
         crawl_url = config.TARGET_URL.rstrip('/')
-        if not crawl_url.endswith('.php'):
-            crawl_url = crawl_url + '/index.php'
+        if 'dvwa' in crawl_url.lower():
+            # DVWA needs to start from index.php
+            if not crawl_url.endswith('.php'):
+                crawl_url = crawl_url + '/index.php'
 
         crawler   = Crawler(crawl_url, auth=auth)
         endpoints = crawler.crawl()
