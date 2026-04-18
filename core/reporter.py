@@ -15,20 +15,21 @@ class Reporter:
     - JSON report: machine-readable, CI/CD ready
     """
 
-    def __init__(self, findings: list, output_dir: str):
-        self.findings   = findings
-        self.output_dir = output_dir
-        self.scan_date  = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    def __init__(self, findings: list, output_dir: str,
+                 report_name: str = None):
+        self.findings    = findings
+        self.output_dir  = output_dir
+        self.report_name = report_name
+        self.scan_date   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def generate(self) -> dict:
         """Generate both HTML and JSON reports. Returns output file paths."""
         os.makedirs(self.output_dir, exist_ok=True)
 
-        timestamp  = datetime.now().strftime("%Y%m%d_%H%M%S")
-        html_path  = os.path.join(self.output_dir,
-                                  f"report_{timestamp}.html")
-        json_path  = os.path.join(self.output_dir,
-                                  f"report_{timestamp}.json")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        prefix    = self.report_name if self.report_name else f"report_{timestamp}"
+        html_path = os.path.join(self.output_dir, f"{prefix}.html")
+        json_path = os.path.join(self.output_dir, f"{prefix}.json")
 
         self._generate_html(html_path)
         self._generate_json(json_path)

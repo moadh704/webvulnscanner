@@ -65,6 +65,55 @@ def parse_args():
         help="Output directory for reports (default: reports)"
     )
 
+    parser.add_argument(
+        "--username",
+        type=str,
+        default=None,
+        help="Login username for authenticated targets\n"
+             "Example: --username admin"
+    )
+
+    parser.add_argument(
+        "--password",
+        type=str,
+        default=None,
+        help="Login password for authenticated targets\n"
+             "Example: --password secret"
+    )
+
+    parser.add_argument(
+        "--ai-provider",
+        type=str,
+        choices=["groq", "gemini", "none"],
+        default=None,
+        help="AI provider override (default: from config.py)\n"
+             "Options: groq, gemini, none"
+    )
+
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=None,
+        help="Request timeout in seconds (default: from config.py)\n"
+             "Example: --timeout 15"
+    )
+
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Maximum pages to crawl (default: from config.py)\n"
+             "Example: --max-pages 100"
+    )
+
+    parser.add_argument(
+        "--report-name",
+        type=str,
+        default=None,
+        help="Custom report filename prefix (default: report_TIMESTAMP)\n"
+             "Example: --report-name myscan"
+    )
+
     return parser.parse_args()
 
 
@@ -96,6 +145,14 @@ def validate_args(args):
     # Set global config values
     config.TARGET_URL  = args.url or ""
     config.SOURCE_DIR  = args.src or ""
+
+    # Apply optional overrides
+    if args.ai_provider:
+        config.AI_PROVIDER = args.ai_provider
+    if args.timeout:
+        config.REQUEST_TIMEOUT = args.timeout
+    if args.max_pages:
+        config.MAX_CRAWL_PAGES = args.max_pages
 
 
 def determine_mode(args):
@@ -147,10 +204,23 @@ def main():
 
         # Auto-detect DVWA and pass credentials
         auth = None
-        if 'dvwa' in config.TARGET_URL.lower() or \
-           ('localhost' in config.TARGET_URL.lower() and
-            'dvwa' in config.TARGET_URL.lower()):
-            # Extract base dvwa path for login URL
+
+        # Use --username/--password flags if provided
+        if args.username and args.password:
+            parsed_target = urlparse(config.TARGET_URL)
+            base          = f"{parsed_target.scheme}://{parsed_target.netloc}"
+            # Try common login paths
+            login_url = f"{base}/login.php"
+            auth = {
+                'url'            : login_url,
+                'username_field' : 'username',
+                'password_field' : 'password',
+                'username'       : args.username,
+                'password'       : args.password,
+                'extra_fields'   : {}
+            }
+        # Auto-detect DVWA
+        elif 'dvwa' in config.TARGET_URL.lower():
             parsed_target = urlparse(config.TARGET_URL)
             base_path = '/'.join(
                 parsed_target.path.rstrip('/').split('/')[:2]
@@ -231,8 +301,6 @@ def main():
         all_findings = Correlator().correlate(all_findings)
         print(f"[*] Correlation complete: "
               f"{len(all_findings)} final finding(s).\n")
-        # TODO: from core.correlator import correlate
-        # all_findings = correlate(all_findings)
 
     # ── AI Enhancement ────────────────────────────────────────────────────────
     if all_findings:
@@ -245,7 +313,10 @@ def main():
     if all_findings:
         print("[*] Generating Report...")
         from core.reporter import Reporter
-        paths = Reporter(all_findings, args.output).generate()
+        paths = Reporter(
+            all_findings, args.output,
+            report_name=args.report_name
+        ).generate()
         print(f"\n[*] Reports saved:")
         print(f"    HTML → {paths['html']}")
         print(f"    JSON → {paths['json']}")
