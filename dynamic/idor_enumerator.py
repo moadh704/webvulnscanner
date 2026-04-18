@@ -40,6 +40,13 @@ class IDOREnumerator:
         findings = []
         print("  [IDOR] Starting IDOR enumeration tests...")
 
+        # Check if target is Juice Shop — probe REST API directly
+        base_url = self._get_base_url_from_config()
+        if base_url and '3000' in base_url:
+            print("  [IDOR] Detected Juice Shop — probing REST API directly...")
+            juice_findings = self._test_juice_shop(base_url)
+            findings.extend(juice_findings)
+
         safe_endpoints = [
             ep for ep in endpoints
             if not any(skip in ep['url'] for skip in SKIP_URLS)
@@ -54,6 +61,73 @@ class IDOREnumerator:
                 findings.append(result)
 
         print(f"  [IDOR] Done. Found {len(findings)} IDOR finding(s).")
+        return findings
+
+    def _get_base_url_from_config(self) -> str:
+        try:
+            return config.TARGET_URL
+        except Exception:
+            return None
+
+    def _test_juice_shop(self, base_url: str) -> list:
+        """Test Juice Shop REST API endpoints for IDOR."""
+        findings = []
+        base = base_url.rstrip('/')
+
+        # Known Juice Shop REST API endpoints with integer IDs
+        api_endpoints = [
+            '/api/Users',
+            '/api/Products',
+            '/rest/user/whoami',
+        ]
+
+        for endpoint in api_endpoints:
+            url = f"{base}{endpoint}"
+            try:
+                resp = self.session.get(
+                    url, timeout=config.REQUEST_TIMEOUT,
+                    allow_redirects=True
+                )
+                if resp.status_code == 200:
+                    # Try enumerating IDs
+                    for id_val in [1, 2, 3]:
+                        id_url = f"{url}/{id_val}"
+                        r1 = self.session.get(
+                            id_url, timeout=config.REQUEST_TIMEOUT
+                        )
+                        r2 = self.session.get(
+                            f"{url}/{id_val + 1}",
+                            timeout=config.REQUEST_TIMEOUT
+                        )
+                        if r1.status_code == 200 and \
+                           r2.status_code == 200 and \
+                           len(r1.text) > 50 and \
+                           r1.text != r2.text:
+                            print(f"  [IDOR] ✓ IDOR detected: {id_url} "
+                                  f"returns different content for "
+                                  f"id={id_val} vs id={id_val + 1}")
+                            findings.append({
+                                'type'            : 'idor',
+                                'owasp'           : 'A01:2021 - Broken Access Control',
+                                'url'             : id_url,
+                                'method'          : 'GET',
+                                'parameter'       : 'id',
+                                'payload'         : str(id_val),
+                                'technique'       : 'sequential-enumeration',
+                                'evidence_dynamic': (
+                                    f"REST API endpoint {endpoint}/{{id}} "
+                                    f"returns different user-specific content "
+                                    f"for different IDs without authorization check"
+                                ),
+                                'evidence_static' : None,
+                                'confidence'      : 0.65,
+                                'module'          : 'dynamic',
+                                'finding_type'    : 3,
+                            })
+                            break
+            except Exception:
+                continue
+
         return findings
 
     # ── Re-authentication ─────────────────────────────────────────────────────

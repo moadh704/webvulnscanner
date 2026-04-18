@@ -56,14 +56,12 @@ class HeaderInspector:
         findings = []
         print("  [Headers] Starting security header inspection...")
 
-        # Only need to check the base URL — headers are server-wide
-        # Use the first endpoint's base URL
+        # Use target URL directly if no endpoints discovered
         if not endpoints:
-            print("  [Headers] No endpoints to inspect.")
-            return []
+            base_url = config.TARGET_URL.rstrip('/')
+        else:
+            base_url = self._get_base_url(endpoints)
 
-        # Get the base URL from the first endpoint
-        base_url = self._get_base_url(endpoints)
         print(f"  [Headers] Inspecting headers at: {base_url}")
 
         try:

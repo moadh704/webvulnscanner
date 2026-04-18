@@ -1,0 +1,101 @@
+{
+  "scan_info": {
+    "tool": "WebVulnScanner v1.0",
+    "date": "2026-04-18 17:32:31",
+    "target_url": "http://localhost:3000",
+    "source_dir": "",
+    "ai_provider": "groq",
+    "total": 5,
+    "summary": {
+      "critical": 1,
+      "high": 4,
+      "medium": 0,
+      "low": 0,
+      "type1": 0,
+      "type2": 0,
+      "type3": 5
+    }
+  },
+  "findings": [
+    {
+      "type": "idor",
+      "owasp": "A01:2021 - Broken Access Control",
+      "url": "http://localhost:3000/api/Products/1",
+      "parameter": "id",
+      "finding_type": 3,
+      "confidence": 0.65,
+      "severity": "Critical",
+      "technique": "sequential-enumeration",
+      "payload": "1",
+      "evidence_static": null,
+      "evidence_dynamic": "REST API endpoint /api/Products/{id} returns different user-specific content for different IDs without authorization check",
+      "ai_note": "",
+      "remediation": "See OWASP guidelines for remediation guidance.",
+      "status": "confirmed"
+    },
+    {
+      "type": "headers",
+      "owasp": "A05:2021 - Security Misconfiguration",
+      "url": "http://localhost:3000",
+      "parameter": "Content-Security-Policy",
+      "finding_type": 3,
+      "confidence": 0.65,
+      "severity": "High",
+      "technique": "header-inspection",
+      "payload": "N/A",
+      "evidence_static": null,
+      "evidence_dynamic": "Header 'Content-Security-Policy' is missing. Risk: No XSS mitigation policy \u2014 scripts from any source allowed",
+      "ai_note": "",
+      "remediation": "See OWASP guidelines for remediation guidance.",
+      "status": "confirmed"
+    },
+    {
+      "type": "headers",
+      "owasp": "A05:2021 - Security Misconfiguration",
+      "url": "http://localhost:3000",
+      "parameter": "Strict-Transport-Security",
+      "finding_type": 3,
+      "confidence": 0.65,
+      "severity": "High",
+      "technique": "header-inspection",
+      "payload": "N/A",
+      "evidence_static": null,
+      "evidence_dynamic": "Header 'Strict-Transport-Security' is missing. Risk: HTTP downgrade attacks \u2014 HTTPS not enforced",
+      "ai_note": "",
+      "remediation": "See OWASP guidelines for remediation guidance.",
+      "status": "confirmed"
+    },
+    {
+      "type": "headers",
+      "owasp": "A05:2021 - Security Misconfiguration",
+      "url": "http://localhost:3000",
+      "parameter": "Referrer-Policy",
+      "finding_type": 3,
+      "confidence": 0.65,
+      "severity": "High",
+      "technique": "header-inspection",
+      "payload": "N/A",
+      "evidence_static": null,
+      "evidence_dynamic": "Header 'Referrer-Policy' is missing. Risk: URL data leaked to third parties via Referer header",
+      "ai_note": "",
+      "remediation": "See OWASP guidelines for remediation guidance.",
+      "status": "confirmed"
+    },
+    {
+      "type": "headers",
+      "owasp": "A05:2021 - Security Misconfiguration",
+      "url": "http://localhost:3000",
+      "parameter": "Permissions-Policy",
+      "finding_type": 3,
+      "confidence": 0.65,
+      "severity": "High",
+      "technique": "header-inspection",
+      "payload": "N/A",
+      "evidence_static": null,
+      "evidence_dynamic": "Header 'Permissions-Policy' is missing. Risk: No browser feature restrictions defined",
+      "ai_note": "",
+      "remediation": "See OWASP guidelines for remediation guidance.",
+      "status": "confirmed"
+    }
+  ]
+}

@@ -148,7 +148,8 @@ def main():
         # Auto-detect DVWA and pass credentials
         auth = None
         if 'dvwa' in config.TARGET_URL.lower() or \
-           'localhost' in config.TARGET_URL.lower():
+           ('localhost' in config.TARGET_URL.lower() and
+            'dvwa' in config.TARGET_URL.lower()):
             # Extract base dvwa path for login URL
             parsed_target = urlparse(config.TARGET_URL)
             base_path = '/'.join(
