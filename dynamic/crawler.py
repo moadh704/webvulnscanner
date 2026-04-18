@@ -46,6 +46,18 @@ class Crawler:
         if self.auth:
             self._authenticate()
         print(f"  [Crawler] Starting crawl on: {self.base_url}")
+
+        # Test connectivity first
+        try:
+            self.session.get(
+                self.base_url, timeout=config.REQUEST_TIMEOUT,
+                allow_redirects=True
+            )
+        except Exception as e:
+            print(f"  [Crawler] Cannot reach target: {e}")
+            print(f"  [Crawler] Aborting scan.")
+            return []
+
         self._visit(self.base_url)
 
         # ── REST API discovery ─────────────────────────────────────────────
