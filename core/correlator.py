@@ -72,34 +72,45 @@ class Correlator:
             else:
                 result[key] = dict(df)
 
-        # Step 2: Match static findings against dynamic findings
-        upgraded_keys = set()  # track already-upgraded keys
+        # Step 2: For each dynamic finding, find the BEST matching static finding
+        for key, df in result.items():
+            best_sf    = None
+            best_score = 0
+
+            for sf in static_findings:
+                score = self._match_score(sf, df)
+                if score > best_score:
+                    best_score = score
+                    best_sf    = sf
+
+            if best_sf and best_score > 0:
+                # Upgrade to Type 1
+                result[key]['finding_type']   = 1
+                result[key]['confidence']      = 0.90
+                result[key]['evidence_static'] = best_sf.get(
+                    'evidence_static', '')
+                print(f"  [Correlator] ↑ Type 1: "
+                      f"{df['type']} at {df.get('url','')} "
+                      f"(matched: {best_sf.get('file','').split(chr(92))[-1]})")
+
+        # Step 3: Add unmatched static findings as Type 2
         for sf in static_findings:
+            # Check if this static finding was used to upgrade a dynamic one
             matched = False
             for key, df in result.items():
-                if self._static_matches_dynamic(sf, df):
-                    if key not in upgraded_keys:
-                        # First match — upgrade to Type 1
-                        result[key]['finding_type']    = 1
-                        result[key]['confidence']       = 0.90
-                        result[key]['evidence_static']  = sf.get(
-                            'evidence_static', '')
-                        upgraded_keys.add(key)
-                        print(f"  [Correlator] ↑ Type 1: "
-                              f"{df['type']} at {df.get('url','')}")
+                if df.get('finding_type') == 1 and \
+                   df.get('evidence_static') == sf.get('evidence_static'):
                     matched = True
                     break
-
-            if not matched:
-                # Type 2 — static only, not confirmed dynamically
-                if sf.get('file'):
-                    sf_copy = dict(sf)
-                    sf_copy['finding_type'] = 2
-                    sf_copy['confidence']   = 0.40
-                    if not sf_copy.get('url'):
-                        sf_copy['url'] = sf_copy.get('file', 'unknown')
-                    s_key = (f"static_{sf.get('file','')}_{sf.get('line',0)}"
-                             f"_{sf.get('type','')}")
+            if not matched and sf.get('file'):
+                sf_copy = dict(sf)
+                sf_copy['finding_type'] = 2
+                sf_copy['confidence']   = 0.40
+                if not sf_copy.get('url'):
+                    sf_copy['url'] = sf_copy.get('file', 'unknown')
+                s_key = (f"static_{sf.get('file','')}_{sf.get('line',0)}"
+                         f"_{sf.get('type','')}")
+                if s_key not in result:
                     result[s_key] = sf_copy
 
         # Step 3: Apply CVSS severity boost
@@ -140,33 +151,43 @@ class Correlator:
         param     = finding.get('parameter', '')
         return f"{vuln_type}|{url}|{param}"
 
-    def _static_matches_dynamic(self, sf: dict, df: dict) -> bool:
+    def _match_score(self, sf: dict, df: dict) -> int:
         """
-        Check if a static finding corresponds to a dynamic finding.
-        Match on vulnerability type + URL path keyword from file path.
+        Return a numeric match score between a static and dynamic finding.
+        Higher score = better match. 0 = no match.
         """
         if sf.get('type') != df.get('type'):
-            return False
+            return 0
 
-        # Extract folder name from static file path
-        # e.g. C:\xampp\htdocs\dvwa\vulnerabilities\sqli\index.php
-        # → 'sqli'
-        file_path = sf.get('file', '').replace('\\', '/')
+        file_path = sf.get('file', '').replace('\\', '/').lower()
         url       = df.get('url', '').lower()
 
-        # Get the vulnerability folder name from the file path
-        parts = file_path.lower().split('/')
-        for part in parts:
-            if part in url:
-                return True
+        SKIP_SEGMENTS = {
+            'index', 'login', 'logout', 'home', 'main',
+            'app', 'src', 'lib', 'includes', 'config',
+            'htdocs', 'www', 'public', 'html', 'php',
+            'xampp', 'users', 'dell', 'desktop',
+        }
 
-        # Also match by parameter name if available
-        sf_param = sf.get('parameter', '')
-        df_param = df.get('parameter', '')
-        if sf_param and df_param and sf_param == df_param:
-            return True
+        file_parts = [
+            p for p in file_path.split('/')
+            if p and len(p) > 2
+            and p not in SKIP_SEGMENTS
+            and not p.endswith('.php')
+            and not p.endswith('.py')
+        ]
 
-        return False
+        from urllib.parse import urlparse
+        url_path  = urlparse(url).path.lower()
+        url_parts = [p for p in url_path.split('/') if p and len(p) > 2]
+
+        # Count overlapping meaningful segments
+        score = sum(1 for part in file_parts if part in url_parts)
+        return score
+
+    def _static_matches_dynamic(self, sf: dict, df: dict) -> bool:
+        """Convenience wrapper — returns True if score > 0."""
+        return self._match_score(sf, df) > 0
 
     # ── Severity boost ────────────────────────────────────────────────────────
 

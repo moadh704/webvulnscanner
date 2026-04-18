@@ -1,0 +1,1443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVulnScanner Report</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.6;
+        }
+
+        /* ── Header ─────────────────────────────────────────────────────── */
+        .header {
+            background: linear-gradient(135deg, #1f3864, #2e5f9e);
+            color: white;
+            padding: 30px 40px;
+        }
+        .header h1 { font-size: 28px; font-weight: 700; }
+        .header p  { opacity: 0.85; margin-top: 4px; font-size: 14px; }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 20px;
+        }
+        .meta-item {
+            background: rgba(255,255,255,0.12);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        .meta-item .label { font-size: 11px; opacity: 0.75; text-transform: uppercase; }
+        .meta-item .value { font-size: 15px; font-weight: 600; margin-top: 2px; }
+
+        /* ── Summary cards ───────────────────────────────────────────────── */
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 16px;
+            padding: 24px 40px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .summary-card {
+            text-align: center;
+            padding: 16px;
+            border-radius: 10px;
+            border: 2px solid;
+        }
+        .summary-card .count { font-size: 36px; font-weight: 700; }
+        .summary-card .label { font-size: 12px; text-transform: uppercase; margin-top: 4px; }
+
+        .card-critical { border-color: #c0392b; color: #c0392b; background: #fdf2f2; }
+        .card-high     { border-color: #e67e22; color: #e67e22; background: #fef5ec; }
+        .card-medium   { border-color: #f39c12; color: #f39c12; background: #fefce8; }
+        .card-low      { border-color: #27ae60; color: #27ae60; background: #f0faf4; }
+        .card-total    { border-color: #2980b9; color: #2980b9; background: #eaf4fd; }
+
+        /* ── Type badges ─────────────────────────────────────────────────── */
+        .type-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .type-1 { background: #d4edda; color: #155724; }
+        .type-2 { background: #fff3cd; color: #856404; }
+        .type-3 { background: #cce5ff; color: #004085; }
+
+        /* ── Severity badges ─────────────────────────────────────────────── */
+        .sev-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+        .sev-critical { background: #c0392b; color: white; }
+        .sev-high     { background: #e67e22; color: white; }
+        .sev-medium   { background: #f39c12; color: white; }
+        .sev-low      { background: #27ae60; color: white; }
+
+        /* ── Findings ────────────────────────────────────────────────────── */
+        .findings { padding: 24px 40px; }
+        .findings h2 { font-size: 20px; color: #1f3864; margin-bottom: 16px; }
+
+        .finding-card {
+            background: white;
+            border-radius: 10px;
+            border-left: 5px solid;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+        .finding-card.critical { border-color: #c0392b; }
+        .finding-card.high     { border-color: #e67e22; }
+        .finding-card.medium   { border-color: #f39c12; }
+        .finding-card.low      { border-color: #27ae60; }
+
+        .finding-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            cursor: pointer;
+            background: #fafafa;
+        }
+        .finding-header h3 { flex: 1; font-size: 15px; color: #1a1a2e; }
+        .finding-header .confidence {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .finding-body { padding: 16px 18px; border-top: 1px solid #f0f0f0; }
+
+        .evidence-block {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+
+        .remediation-block {
+            background: #f0faf4;
+            border: 1px solid #b7dfc4;
+            border-radius: 6px;
+            padding: 12px;
+            margin: 8px 0;
+            font-size: 13px;
+        }
+
+        .field-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #888;
+            margin-top: 10px;
+            margin-bottom: 4px;
+        }
+
+        .dismissed {
+            opacity: 0.5;
+            text-decoration: line-through;
+        }
+
+        /* ── Footer ──────────────────────────────────────────────────────── */
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+            font-size: 12px;
+            border-top: 1px solid #e0e0e0;
+            background: white;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>🔍 WebVulnScanner — Security Report</h1>
+    <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
+    <div class="meta-grid">
+        <div class="meta-item">
+            <div class="label">Target URL</div>
+            <div class="value">http://localhost/dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Source Directory</div>
+            <div class="value">C:\xampp\htdocs\dvwa</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Scan Date</div>
+            <div class="value">2026-04-18 18:16:25</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">AI Provider</div>
+            <div class="value">groq</div>
+        </div>
+        <div class="meta-item">
+            <div class="label">Total Findings</div>
+            <div class="value">25</div>
+        </div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary">
+    <div class="summary-card card-total">
+        <div class="count">25</div>
+        <div class="label">Total</div>
+    </div>
+    <div class="summary-card card-critical">
+        <div class="count">1</div>
+        <div class="label">Critical</div>
+    </div>
+    <div class="summary-card card-high">
+        <div class="count">24</div>
+        <div class="label">High</div>
+    </div>
+    <div class="summary-card card-medium">
+        <div class="count">0</div>
+        <div class="label">Medium</div>
+    </div>
+    <div class="summary-card card-low">
+        <div class="count">0</div>
+        <div class="label">Low</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#8e44ad;color:#8e44ad;background:#f5eef8;">
+        <div class="count">1</div>
+        <div class="label">Type 1 (Confirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#c0392b;color:#c0392b;background:#fdf2f2;">
+        <div class="count">24</div>
+        <div class="label">Type 2 (Unconfirmed)</div>
+    </div>
+    <div class="summary-card card-total" style="border-color:#16a085;color:#16a085;background:#eafaf1;">
+        <div class="count">0</div>
+        <div class="label">Type 3 (Runtime)</div>
+    </div>
+</div>
+
+<!-- Findings -->
+<div class="findings">
+    <h2>Findings (25)</h2>
+
+    
+    
+    
+    <div class="finding-card critical ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>
+                [SQLI]
+                http://localhost/dvwa/vulnerabilities/sqli/
+                 — param: <code>id</code>
+            </h3>
+            <span class="type-badge type-1">
+                Type 1
+                 ✓ Confirmed
+                
+            </span>
+            <span class="confidence">90%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\low.php, Line: 5, Code: requires login</div>
+            
+
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
+            
+            <div style="font-size:12px;color:#666;margin-top:4px;">
+                Payload: <code>&#39;</code>
+            </div>
+            
+            
+
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the SQLi vulnerability, the application should use prepared statements with parameterized queries to separate code from user input. A concrete code-level fix example would be to replace the vulnerable line in `low.php` with a prepared statement, such as `$query = &#34;SELECT * FROM users WHERE id = ?&#34;; $stmt = $mysqli-&gt;prepare($query); $stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);`. By doing so, the application will prevent malicious user input from modifying the SQL query, effectively fixing the SQLi vulnerability.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\login.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The static code scanner&#39;s output does not provide any actual code or evidence of a SQL injection vulnerability, it only mentions &#34;requires login&#34; which does not indicate a potential SQL injection issue.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\login.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 24, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The provided &#34;evidence&#34; does not show any actual code that is vulnerable to SQL injection, it simply mentions that the file requires login, which is not sufficient to indicate a vulnerability.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php, Line: 17, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any code snippet that indicates a potential SQL injection vulnerability, it only mentions that the code requires a login.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 8, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The message &#34;requires login&#34; does not indicate any SQL injection vulnerability, but rather seems to be a comment or note about the required authentication for the file.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 13, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any actual code that could be used to determine a potential SQL injection vulnerability, it seems to be a misinterpretation of a comment or a requirement.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any actual code snippet that would indicate a potential SQL injection vulnerability, and the &#34;requires login&#34; statement suggests a potential security measure rather than a vulnerability.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 8, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The static code scanner&#39;s report does not provide any actual code evidence of a potential SQL injection vulnerability, only a vague mention of a &#34;requires login&#34; line, which is insufficient to determine a real vulnerability.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided evidence does not contain any code snippet that indicates a potential SQL injection vulnerability, it only mentions a &#34;requires login&#34; condition which is a security measure.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 9, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any code that interacts with a database, making it unlikely to be a SQL injection vulnerability.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 8, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The message &#34;requires login&#34; does not indicate any potential SQL injection vulnerability, but rather appears to be a comment or statement regarding authentication requirements.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 9, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided evidence does not contain any code that indicates a potential SQL injection vulnerability, it only mentions that the file requires login.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 50, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The provided information does not contain any actual code or evidence of a SQL injection vulnerability, only a mention of a login requirement and a file path.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">55%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 51, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">REAL 
+The scanner has flagged the code due to the potential for injecting malicious input, which is a common issue in applications that do not properly sanitize user input, particularly in SQL queries.</div>
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the SQLi vulnerability in the `low.php` file, parameterized queries or prepared statements should be used to prevent user input from being executed as SQL code. A code-level fix example would be to replace the vulnerable code with a prepared statement, such as `$stmt = $pdo-&gt;prepare(&#39;SELECT * FROM users WHERE username = :username&#39;);`. By using prepared statements, the input is treated as a parameter, not as part of the SQL code, effectively preventing SQL injection attacks.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 51, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any specific code snippet that indicates a potential SQLi vulnerability, it seems to be a generic login requirement check.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 52, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The message provided does not contain any code or specific details about a SQL query or user-input handling that would indicate an actual SQL injection vulnerability.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any code that is vulnerable to SQL injection, it seems to be a misunderstanding or misinterpretation of the requires login statement.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php, Line: 6, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The provided information does not contain any code that directly indicates a SQL injection vulnerability, and the evidence mentions &#34;requires login&#34; which does not provide sufficient context to confirm an SQL injection issue.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php, Line: 7, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The report appears to be a false positive as the evidence provided does not contain any code snippet that is vulnerable to SQL injection, instead it mentions &#34;requires login&#34; which is a security measure.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php, Line: 8, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The provided information does not contain any code that indicates a potential SQL injection vulnerability, it only mentions that the file requires a login.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 12, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The provided information does not contain any actual code that could be used to determine a SQL injection vulnerability, it merely states that the file requires login.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 16, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The message &#34;requires login&#34; does not indicate any potential SQL injection vulnerability, but rather appears to be a notice or comment regarding authentication requirements.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE. The provided information does not contain any code that interacts with a database or uses user input in a way that could lead to an SQL injection vulnerability, it only mentions a login requirement.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high ">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">55%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">REAL 
+The evidence provided does not offer sufficient information to determine the nature of the vulnerability, but the location of the file suggests it is part of the Damn Vulnerable Web Application (DVWA), which is intentionally designed to contain vulnerabilities, including SQL injection.</div>
+            
+
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate the SQLi vulnerability, user input should be properly sanitized and parameterized queries should be used. In the `low.php` file, the code can be modified to use prepared statements, for example, by replacing `$query = &#34;SELECT * FROM users WHERE id = &#39;$id&#39;;&#34;` with `$stmt = $pdo-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;); $stmt-&gt;execute([$id]);`. This change will help prevent malicious input from being executed as part of the SQL query.</div>
+            
+
+            
+
+        </div>
+    </div>
+    
+    
+    
+    <div class="finding-card high dismissed">
+
+        <div class="finding-header">
+            <span class="sev-badge sev-high">High</span>
+            <h3>
+                [SQLI]
+                C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php
+                
+            </h3>
+            <span class="type-badge type-2">
+                Type 2
+                 ⚠ Unconfirmed
+                
+            </span>
+            <span class="confidence">40%</span>
+        </div>
+
+        <div class="finding-body">
+
+            <div class="field-label">OWASP Category</div>
+            <div>A03:2021 - Injection</div>
+
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php, Line: 5, Code: requires login</div>
+            
+
+            
+
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="evidence-block" style="background:#fffbf0;border-color:#f0c040;">FALSE_POSITIVE
+The evidence provided does not contain any actual code that demonstrates a SQL injection vulnerability, but rather a generic statement indicating that login is required.</div>
+            
+
+            
+
+            
+            <div style="color:#c0392b;font-size:13px;margin-top:8px;">
+                ✗ Dismissed as false positive by AI review
+            </div>
+            
+
+        </div>
+    </div>
+    
+
+    
+</div>
+
+<div class="footer">
+    Generated by WebVulnScanner v1.0 — Academic Security Research Tool
+</div>
+
+</body>
+</html>
