@@ -6,16 +6,262 @@ Usage:
     python main.py --url http://target.com --src ./source/
     python main.py --url http://target.com --scan sqli,xss
     python main.py --url http://target.com --src ./source/ --scan sqli,cmdi
+    python main.py --url http://target.com --no-ai --quiet
 """
 
 import argparse
 import os
 import sys
+import io
+import time
 from urllib.parse import urlparse
 
 import config
 from core.scan_manager import ScanManager
 
+
+class _QuietMode:
+    """Context manager — suppresses stdout when quiet mode is on."""
+    def __init__(self, active: bool):
+        self.active = active
+        self._old   = None
+
+    def __enter__(self):
+        if self.active:
+            self._old  = sys.stdout
+            sys.stdout = io.StringIO()
+        return self
+
+    def __exit__(self, *_):
+        if self.active and self._old:
+            sys.stdout = self._old
+
+
+# ── Rich progress helpers ──────────────────────────────────────────────────────
+
+def _make_progress():
+    """Create a Rich progress bar with phase display."""
+    try:
+        from rich.progress import (
+            Progress, SpinnerColumn, BarColumn,
+            TextColumn, TimeElapsedColumn, TaskProgressColumn
+        )
+        from rich.console import Console
+        from rich.theme import Theme
+
+        theme = Theme({
+            "progress.description": "bold cyan",
+            "progress.percentage" : "bold green",
+            "bar.complete"        : "green",
+            "bar.finished"        : "bold green",
+        })
+        console = Console(theme=theme)
+        progress = Progress(
+            SpinnerColumn(spinner_name="dots"),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(bar_width=30),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=console,
+            transient=False,
+        )
+        return progress
+    except ImportError:
+        return None
+
+
+class PhaseTracker:
+    """
+    Tracks scan phases and shows a clean progress display using Rich.
+    Falls back to plain text if Rich is not available.
+    """
+
+    PHASES = [
+        ("🔍 Static Analysis",    "Scanning source code with Semgrep rules"),
+        ("🌐 Crawling Target",     "Discovering endpoints and parameters"),
+        ("💉 Injection Testing",   "Running dynamic vulnerability injectors"),
+        ("🔗 Correlation Engine",  "Matching static and dynamic findings"),
+        ("🤖 AI Enhancement",      "Reviewing findings and generating remediations"),
+        ("📄 Generating Report",   "Writing HTML and JSON reports"),
+    ]
+
+    def __init__(self, mode: str, modules: list, use_ai: bool):
+        self.mode    = mode
+        self.modules = modules
+        self.use_ai  = use_ai
+        self._rich   = None
+        self._task   = None
+        self._phase  = 0
+        self._total  = self._count_phases()
+
+        try:
+            from rich.console import Console
+            from rich.panel import Panel
+            from rich.text import Text
+            self._console = Console()
+            self._has_rich = True
+        except ImportError:
+            self._has_rich = False
+
+    def _count_phases(self) -> int:
+        count = 0
+        if self.mode in ("hybrid", "static"):
+            count += 1  # static
+        if self.mode in ("hybrid", "dynamic", "dynamic-only"):
+            count += 1  # crawl
+            count += len(self.modules)  # one per module
+        count += 1  # correlation
+        if self.use_ai:
+            count += 1  # AI
+        count += 1  # report
+        return max(count, 1)
+
+    def start(self, target_url: str, source_dir: str,
+              modules: list, ai_provider: str):
+        """Print the scan header."""
+        if self._has_rich:
+            from rich.console import Console
+            from rich.panel import Panel
+            from rich.table import Table
+            from rich import box
+
+            c = Console()
+            c.print()
+            c.print(
+                Panel.fit(
+                    f"[bold cyan]WebVulnScanner v1.0[/bold cyan]  "
+                    f"[dim]Academic Security Research Tool[/dim]",
+                    border_style="cyan"
+                )
+            )
+            t = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
+            t.add_column(style="dim")
+            t.add_column(style="bold white")
+            if target_url:
+                t.add_row("Target URL",  target_url)
+            if source_dir:
+                t.add_row("Source Dir",  source_dir)
+            t.add_row("Mode",        self.mode)
+            t.add_row("Modules",     ", ".join(modules))
+            t.add_row("AI Provider", ai_provider if self.use_ai else "disabled")
+            c.print(t)
+            c.print()
+        else:
+            print("=" * 60)
+            print("  WebVulnScanner v1.0 — Academic Security Research Tool")
+            print("=" * 60)
+            print(f"  Target  : {target_url or 'N/A'}")
+            print(f"  Mode    : {self.mode}")
+            print(f"  Modules : {', '.join(modules)}")
+            print()
+
+    def phase(self, name: str, detail: str = ""):
+        """Announce a new phase."""
+        self._phase += 1
+        pct = int((self._phase / self._total) * 100)
+
+        if self._has_rich:
+            from rich.console import Console
+            c = Console()
+            bar_filled = int(pct / 5)
+            bar = "█" * bar_filled + "░" * (20 - bar_filled)
+            c.print(
+                f"  [dim][{self._phase}/{self._total}][/dim]  "
+                f"[cyan]{bar}[/cyan]  [bold]{name}[/bold]"
+                + (f"  [dim]{detail}[/dim]" if detail else "")
+            )
+        else:
+            print(f"[{self._phase}/{self._total}] {name}"
+                  + (f" — {detail}" if detail else ""))
+
+    def done(self, findings: list, paths: dict):
+        """Print the final summary."""
+        retained = [f for f in findings if f.get('status') != 'dismissed']
+        dismissed = len(findings) - len(retained)
+
+        cr = sum(1 for f in retained if f.get('severity') == 'Critical')
+        hi = sum(1 for f in retained if f.get('severity') == 'High')
+        me = sum(1 for f in retained if f.get('severity') == 'Medium')
+        lo = sum(1 for f in retained if f.get('severity') == 'Low')
+        t1 = sum(1 for f in retained if f.get('finding_type') == 1)
+        t2 = sum(1 for f in retained if f.get('finding_type') == 2)
+        t3 = sum(1 for f in retained if f.get('finding_type') == 3)
+
+        if self._has_rich:
+            from rich.console import Console
+            from rich.table import Table
+            from rich.panel import Panel
+            from rich import box
+
+            c = Console()
+            c.print()
+
+            t = Table(
+                title="Scan Summary",
+                box=box.ROUNDED,
+                border_style="cyan",
+                show_header=True,
+                header_style="bold cyan"
+            )
+            t.add_column("Category",  style="dim", width=22)
+            t.add_column("Count",     justify="right", width=8)
+            t.add_column("Details",   style="dim")
+
+            t.add_row("Total Findings",
+                      f"[bold white]{len(retained)}[/]", "")
+            t.add_section()
+            if cr: t.add_row("Critical",
+                              f"[bold red]{cr}[/]", "Immediate action required")
+            if hi: t.add_row("High",
+                              f"[bold yellow]{hi}[/]", "High risk")
+            if me: t.add_row("Medium",
+                              f"[yellow]{me}[/]", "Medium risk")
+            if lo: t.add_row("Low",
+                              f"[green]{lo}[/]", "Low risk")
+            t.add_section()
+            if t1: t.add_row("✓ Verified",
+                              f"[bold green]{t1}[/]",
+                              "Static + Dynamic confirmed")
+            if t2: t.add_row("⚠ Candidate",
+                              f"[yellow]{t2}[/]",
+                              "Static only, AI reviewed")
+            if t3: t.add_row("◎ Detected",
+                              f"[cyan]{t3}[/]",
+                              "Runtime only")
+            if dismissed:
+                t.add_section()
+                t.add_row("Dismissed (FP)",
+                          f"[dim]{dismissed}[/]",
+                          "Removed by AI as false positives")
+
+            c.print(t)
+            c.print()
+            if paths.get('html'):
+                c.print(f"  [bold green]✓[/] HTML report → [cyan]{paths['html']}[/]")
+            if paths.get('json'):
+                c.print(f"  [bold green]✓[/] JSON report → [cyan]{paths['json']}[/]")
+            c.print()
+            c.print(
+                Panel.fit(
+                    "[bold green]✓ Scan complete[/bold green]",
+                    border_style="green"
+                )
+            )
+        else:
+            print("=" * 60)
+            print(f"  SCAN COMPLETE — {len(retained)} findings")
+            if cr: print(f"  Critical : {cr}")
+            if hi: print(f"  High     : {hi}")
+            if me: print(f"  Medium   : {me}")
+            if lo: print(f"  Low      : {lo}")
+            print("=" * 60)
+            if paths.get('html'):
+                print(f"  HTML → {paths['html']}")
+            if paths.get('json'):
+                print(f"  JSON → {paths['json']}")
+
+
+# ── Argument parsing ───────────────────────────────────────────────────────────
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -24,193 +270,169 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--url",
-        type=str,
-        help="Target URL to scan (required for dynamic analysis)\n"
-             "Example: --url http://dvwa.local"
+        "--url", type=str,
+        help="Target URL to scan\nExample: --url http://dvwa.local"
     )
-
     parser.add_argument(
-        "--src",
-        type=str,
-        default=None,
-        help="Path to source code directory (optional, enables hybrid mode)\n"
-             "Example: --src ./dvwa-source/"
+        "--src", type=str, default=None,
+        help="Source code directory (enables hybrid mode)\nExample: --src ./dvwa-source/"
     )
-
     parser.add_argument(
-        "--scan",
-        type=str,
-        default=None,
-        help="Comma-separated list of modules to run (default: all)\n"
+        "--scan", type=str, default=None,
+        help="Modules to run (default: all)\n"
              "Options: sqli, xss, cmdi, traversal, idor, headers\n"
              "Example: --scan sqli,xss"
     )
-
     parser.add_argument(
-        "--mode",
-        type=str,
-        choices=["full", "static", "dynamic"],
-        default="full",
+        "--mode", type=str,
+        choices=["full", "static", "dynamic"], default="full",
         help="Analysis mode (default: full)\n"
              "  full    - static + dynamic\n"
-             "  static  - static only (requires --src)\n"
+             "  static  - static only\n"
              "  dynamic - dynamic only"
     )
-
     parser.add_argument(
-        "--output",
-        type=str,
-        default="reports",
-        help="Output directory for reports (default: reports)"
+        "--output", type=str, default="reports",
+        help="Output directory (default: reports)"
     )
-
     parser.add_argument(
-        "--username",
-        type=str,
-        default=None,
-        help="Login username for authenticated targets\n"
-             "Example: --username admin"
+        "--output-format", type=str,
+        choices=["html", "json", "both"], default="both",
+        help="Report format (default: both)\n"
+             "Options: html, json, both"
     )
-
     parser.add_argument(
-        "--password",
-        type=str,
-        default=None,
-        help="Login password for authenticated targets\n"
-             "Example: --password secret"
+        "--username", type=str, default=None,
+        help="Login username\nExample: --username admin"
     )
-
     parser.add_argument(
-        "--ai-provider",
-        type=str,
-        choices=["groq", "gemini", "none"],
-        default=None,
-        help="AI provider override (default: from config.py)\n"
-             "Options: groq, gemini, none"
+        "--password", type=str, default=None,
+        help="Login password\nExample: --password secret"
     )
-
     parser.add_argument(
-        "--timeout",
-        type=int,
-        default=None,
-        help="Request timeout in seconds (default: from config.py)\n"
-             "Example: --timeout 15"
+        "--ai-provider", type=str,
+        choices=["groq", "gemini", "none"], default=None,
+        help="AI provider override\nOptions: groq, gemini, none"
     )
-
     parser.add_argument(
-        "--max-pages",
-        type=int,
-        default=None,
-        help="Maximum pages to crawl (default: from config.py)\n"
-             "Example: --max-pages 100"
+        "--no-ai", action="store_true",
+        help="Disable AI enhancement layer (faster scans)"
     )
-
     parser.add_argument(
-        "--report-name",
-        type=str,
-        default=None,
-        help="Custom report filename prefix (default: report_TIMESTAMP)\n"
-             "Example: --report-name myscan"
+        "--timeout", type=int, default=None,
+        help="Request timeout in seconds\nExample: --timeout 15"
+    )
+    parser.add_argument(
+        "--max-pages", type=int, default=None,
+        help="Max pages to crawl\nExample: --max-pages 100"
+    )
+    parser.add_argument(
+        "--report-name", type=str, default=None,
+        help="Custom report filename\nExample: --report-name myscan"
+    )
+    parser.add_argument(
+        "--verbose", action="store_true",
+        help="Show detailed output for every request"
+    )
+    parser.add_argument(
+        "--quiet", action="store_true",
+        help="Suppress all output except findings summary"
     )
 
     return parser.parse_args()
 
 
 def validate_args(args):
-    """Validate argument combinations and set config values."""
     errors = []
-
-    # At least one of --url or --src must be provided
     if not args.url and not args.src:
         errors.append("At least one of --url or --src must be provided.")
-
-    # Static-only mode requires --src
     if args.mode == "static" and not args.src:
-        errors.append("--mode static requires --src to be provided.")
-
-    # Dynamic-only mode requires --url
+        errors.append("--mode static requires --src.")
     if args.mode == "dynamic" and not args.url:
-        errors.append("--mode dynamic requires --url to be provided.")
-
-    # Validate source directory exists if provided
+        errors.append("--mode dynamic requires --url.")
     if args.src and not os.path.isdir(args.src):
         errors.append(f"Source directory not found: {args.src}")
-
+    if args.verbose and args.quiet:
+        errors.append("--verbose and --quiet cannot be used together.")
     if errors:
         for e in errors:
             print(f"[!] Error: {e}")
         sys.exit(1)
 
-    # Set global config values
-    config.TARGET_URL  = args.url or ""
-    config.SOURCE_DIR  = args.src or ""
+    config.TARGET_URL = args.url or ""
+    config.SOURCE_DIR = args.src or ""
 
-    # Apply optional overrides
-    if args.ai_provider:
+    # --no-ai overrides --ai-provider
+    if args.no_ai:
+        config.AI_PROVIDER = "none"
+    elif args.ai_provider:
         config.AI_PROVIDER = args.ai_provider
+
     if args.timeout:
         config.REQUEST_TIMEOUT = args.timeout
     if args.max_pages:
         config.MAX_CRAWL_PAGES = args.max_pages
 
+    # Store output format in config for reporter
+    config.OUTPUT_FORMAT = args.output_format
+
 
 def determine_mode(args):
-    """Determine the operating mode based on inputs."""
     if args.mode == "static":
         return "static"
     if args.mode == "dynamic":
         return "dynamic"
-    # Full mode: hybrid if both provided, dynamic-only if only URL
     if args.url and args.src:
         return "hybrid"
     return "dynamic-only"
 
 
-def main():
-    print("=" * 60)
-    print("  WebVulnScanner v1.0 — Academic Security Research Tool")
-    print("=" * 60)
+# ── Main ───────────────────────────────────────────────────────────────────────
 
-    args        = parse_args()
+def main():
+    args         = parse_args()
     validate_args(args)
 
     scan_manager = ScanManager(args.scan)
     mode         = determine_mode(args)
+    use_ai       = config.AI_PROVIDER != "none"
 
-    print(f"\n[*] Mode          : {mode}")
-    print(f"[*] Target URL    : {args.url or 'N/A'}")
-    print(f"[*] Source Dir    : {args.src or 'N/A'}")
-    print(f"[*] Active Modules: {', '.join(scan_manager.active_modules())}")
-    print(f"[*] AI Provider   : {config.AI_PROVIDER}")
-    print(f"[*] Output Dir    : {args.output}")
-    print()
+    # Suppress crawler/injector verbose output in quiet mode
+    config.QUIET   = args.quiet
+    config.VERBOSE = args.verbose
 
-    all_findings = []
+    tracker = PhaseTracker(mode, scan_manager.active_modules(), use_ai)
+    tracker.start(
+        target_url = args.url or "",
+        source_dir = args.src or "",
+        modules    = scan_manager.active_modules(),
+        ai_provider= config.AI_PROVIDER,
+    )
+
+    all_findings    = []
+    static_findings = []
+    quiet           = args.quiet
 
     # ── Static Phase ──────────────────────────────────────────────────────────
     if mode in ("hybrid", "static") and config.SOURCE_DIR:
-        print("[*] Starting Static Analysis...")
+        tracker.phase("Static Analysis", f"Scanning {config.SOURCE_DIR}")
         from static.scanner import StaticScanner
-        static_findings = StaticScanner(scan_manager).run(config.SOURCE_DIR)
+        with _QuietMode(quiet):
+            static_findings = StaticScanner(scan_manager).run(config.SOURCE_DIR)
         all_findings.extend(static_findings)
-        print(f"[*] Static analysis found "
-              f"{len(static_findings)} candidate finding(s).\n")
 
     # ── Dynamic Phase ─────────────────────────────────────────────────────────
     if mode in ("hybrid", "dynamic", "dynamic-only") and config.TARGET_URL:
-        print("[*] Starting Dynamic Analysis...")
+
+        # ── Crawl ─────────────────────────────────────────────────────────────
+        tracker.phase("Crawling Target", config.TARGET_URL)
         from dynamic.crawler import Crawler
 
-        # Auto-detect DVWA and pass credentials
         auth = None
-
-        # Use --username/--password flags if provided
         if args.username and args.password:
             parsed_target = urlparse(config.TARGET_URL)
             base          = f"{parsed_target.scheme}://{parsed_target.netloc}"
-            # Try common login paths
-            login_url = f"{base}/login.php"
+            login_url     = f"{base}/login.php"
             auth = {
                 'url'            : login_url,
                 'username_field' : 'username',
@@ -219,13 +441,13 @@ def main():
                 'password'       : args.password,
                 'extra_fields'   : {}
             }
-        # Auto-detect DVWA
         elif 'dvwa' in config.TARGET_URL.lower():
             parsed_target = urlparse(config.TARGET_URL)
             base_path = '/'.join(
                 parsed_target.path.rstrip('/').split('/')[:2]
-            )  # e.g. /dvwa
-            login_url = f"{parsed_target.scheme}://{parsed_target.netloc}{base_path}/login.php"
+            )
+            login_url = (f"{parsed_target.scheme}://"
+                         f"{parsed_target.netloc}{base_path}/login.php")
             auth = {
                 'url'            : login_url,
                 'username_field' : 'username',
@@ -235,95 +457,96 @@ def main():
                 'extra_fields'   : {'Login': 'Login'}
             }
 
-        # Determine starting crawl URL
         crawl_url = config.TARGET_URL.rstrip('/')
-        if 'dvwa' in crawl_url.lower():
-            # DVWA needs to start from index.php
-            if not crawl_url.endswith('.php'):
-                crawl_url = crawl_url + '/index.php'
+        if 'dvwa' in crawl_url.lower() and not crawl_url.endswith('.php'):
+            crawl_url += '/index.php'
 
-        crawler   = Crawler(crawl_url, auth=auth)
-        endpoints = crawler.crawl()
-        print(f"[*] Crawler found {len(endpoints)} endpoint(s) to test.\n")
+        crawler = Crawler(crawl_url, auth=auth)
+        with _QuietMode(quiet):
+            endpoints = crawler.crawl()
 
-        # ── SQLi Injector ─────────────────────────────────────────────────────
+        # ── Injectors ─────────────────────────────────────────────────────────
         if scan_manager.is_active('sqli'):
+            tracker.phase("SQL Injection", f"Testing {len(endpoints)} endpoint(s)")
             from dynamic.sqli_injector import SQLiInjector
-            sqli_findings = SQLiInjector(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(sqli_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    SQLiInjector(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
-        # ── XSS Injector ──────────────────────────────────────────────────────
         if scan_manager.is_active('xss'):
+            tracker.phase("Cross-Site Scripting (XSS)", f"Testing {len(endpoints)} endpoint(s)")
             from dynamic.xss_injector import XSSInjector
-            xss_findings = XSSInjector(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(xss_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    XSSInjector(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
-        # ── CMDi Injector ─────────────────────────────────────────────────────
         if scan_manager.is_active('cmdi'):
+            tracker.phase("Command Injection", f"Testing {len(endpoints)} endpoint(s)")
             from dynamic.cmdi_injector import CMDiInjector
-            cmdi_findings = CMDiInjector(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(cmdi_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    CMDiInjector(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
-        # ── Traversal Injector ────────────────────────────────────────────────
         if scan_manager.is_active('traversal'):
+            tracker.phase("Path Traversal", f"Testing {len(endpoints)} endpoint(s)")
             from dynamic.traversal_injector import TraversalInjector
-            traversal_findings = TraversalInjector(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(traversal_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    TraversalInjector(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
-        # ── IDOR Enumerator ───────────────────────────────────────────────────
         if scan_manager.is_active('idor'):
+            tracker.phase("IDOR Enumeration", f"Testing {len(endpoints)} endpoint(s)")
             from dynamic.idor_enumerator import IDOREnumerator
-            idor_findings = IDOREnumerator(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(idor_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    IDOREnumerator(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
-        # ── Header Inspector ──────────────────────────────────────────────────
         if scan_manager.is_active('headers'):
+            tracker.phase("Security Headers", config.TARGET_URL)
             from dynamic.header_inspector import HeaderInspector
-            header_findings = HeaderInspector(
-                crawler.session, scan_manager, auth=auth
-            ).run(endpoints)
-            all_findings.extend(header_findings)
+            with _QuietMode(quiet):
+                all_findings.extend(
+                    HeaderInspector(crawler.session, scan_manager, auth=auth).run(endpoints)
+                )
 
     # ── Correlation ───────────────────────────────────────────────────────────
     if all_findings:
-        print("[*] Running Correlation Engine...")
+        tracker.phase("Correlation Engine",
+                      f"{len(static_findings)} static + "
+                      f"{len(all_findings) - len(static_findings)} dynamic")
         from core.correlator import Correlator
-        all_findings = Correlator().correlate(all_findings)
-        print(f"[*] Correlation complete: "
-              f"{len(all_findings)} final finding(s).\n")
+        with _QuietMode(quiet):
+            all_findings = Correlator().correlate(all_findings)
 
     # ── AI Enhancement ────────────────────────────────────────────────────────
-    if all_findings:
-        print("[*] Running AI Enhancement Layer...")
+    if all_findings and use_ai:
+        tracker.phase("AI Enhancement",
+                      f"Reviewing {len(all_findings)} finding(s) with {config.AI_PROVIDER}")
         from core.ai_provider import AIEnhancer
-        all_findings = AIEnhancer().enhance(all_findings)
-        print()
+        with _QuietMode(quiet):
+            all_findings = AIEnhancer().enhance(all_findings)
 
     # ── Report ────────────────────────────────────────────────────────────────
+    paths = {}
     if all_findings:
-        print("[*] Generating Report...")
+        tracker.phase("Generating Report", args.output)
         from core.reporter import Reporter
-        paths = Reporter(
-            all_findings, args.output,
-            report_name=args.report_name
-        ).generate()
-        print(f"\n[*] Reports saved:")
-        print(f"    HTML → {paths['html']}")
-        print(f"    JSON → {paths['json']}")
+        with _QuietMode(quiet):
+            paths = Reporter(
+                all_findings, args.output,
+                report_name   = args.report_name,
+                output_format = getattr(args, 'output_format', 'both')
+            ).generate()
     else:
-        print("[*] No findings to report.")
+        if not quiet:
+            print("\n  No findings to report.")
 
-    print("\n[*] Scan complete.")
+    tracker.done(all_findings, paths)
 
 
 if __name__ == "__main__":

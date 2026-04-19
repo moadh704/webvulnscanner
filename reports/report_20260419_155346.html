@@ -127,24 +127,24 @@
     <h1>🔍 WebVulnScanner — Security Report</h1>
     <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
     <div class="meta-grid">
-        <div class="meta-item"><div class="label">Target URL</div><div class="value">{{ target_url or 'N/A' }}</div></div>
-        <div class="meta-item"><div class="label">Source Directory</div><div class="value">{{ source_dir or 'N/A (Dynamic-only)' }}</div></div>
-        <div class="meta-item"><div class="label">Scan Date</div><div class="value">{{ scan_date }}</div></div>
-        <div class="meta-item"><div class="label">AI Provider</div><div class="value">{{ ai_provider }}</div></div>
-        <div class="meta-item"><div class="label">Total Findings</div><div class="value">{{ findings | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div></div>
+        <div class="meta-item"><div class="label">Target URL</div><div class="value">http://localhost/dvwa</div></div>
+        <div class="meta-item"><div class="label">Source Directory</div><div class="value">N/A (Dynamic-only)</div></div>
+        <div class="meta-item"><div class="label">Scan Date</div><div class="value">2026-04-19 15:53:46</div></div>
+        <div class="meta-item"><div class="label">AI Provider</div><div class="value">groq</div></div>
+        <div class="meta-item"><div class="label">Total Findings</div><div class="value">1</div></div>
     </div>
 </div>
 
 <!-- Summary cards -->
 <div class="summary">
-    <div class="summary-card card-total"><div class="count">{{ findings | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">Total</div></div>
-    <div class="summary-card card-critical"><div class="count">{{ findings | selectattr('severity', 'equalto', 'Critical') | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">Critical</div></div>
-    <div class="summary-card card-high"><div class="count">{{ findings | selectattr('severity', 'equalto', 'High') | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">High</div></div>
-    <div class="summary-card card-medium"><div class="count">{{ findings | selectattr('severity', 'equalto', 'Medium') | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">Medium</div></div>
-    <div class="summary-card card-low"><div class="count">{{ findings | selectattr('severity', 'equalto', 'Low') | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">Low</div></div>
-    <div class="summary-card card-verified"><div class="count">{{ findings | selectattr('finding_type', 'equalto', 1) | list | length }}</div><div class="label">Verified</div></div>
-    <div class="summary-card card-candidate"><div class="count">{{ findings | selectattr('finding_type', 'equalto', 2) | rejectattr('status', 'equalto', 'dismissed') | list | length }}</div><div class="label">Candidate</div></div>
-    <div class="summary-card card-detected"><div class="count">{{ findings | selectattr('finding_type', 'equalto', 3) | list | length }}</div><div class="label">Detected</div></div>
+    <div class="summary-card card-total"><div class="count">1</div><div class="label">Total</div></div>
+    <div class="summary-card card-critical"><div class="count">1</div><div class="label">Critical</div></div>
+    <div class="summary-card card-high"><div class="count">0</div><div class="label">High</div></div>
+    <div class="summary-card card-medium"><div class="count">0</div><div class="label">Medium</div></div>
+    <div class="summary-card card-low"><div class="count">0</div><div class="label">Low</div></div>
+    <div class="summary-card card-verified"><div class="count">0</div><div class="label">Verified</div></div>
+    <div class="summary-card card-candidate"><div class="count">0</div><div class="label">Candidate</div></div>
+    <div class="summary-card card-detected"><div class="count">1</div><div class="label">Detected</div></div>
 </div>
 
 <!-- Legend -->
@@ -167,7 +167,7 @@
 </div>
 
 <!-- Charts -->
-{% if findings %}
+
 <div class="charts-section">
     <div class="chart-box">
         <h3>Findings by Severity</h3>
@@ -178,64 +178,52 @@
         <div class="chart-container"><canvas id="typeChart"></canvas></div>
     </div>
 </div>
-{% endif %}
+
 
 <!-- Findings -->
 <div class="findings">
     <div class="findings-header">
-        <h2>Findings ({{ findings | rejectattr('status', 'equalto', 'dismissed') | list | length }})</h2>
-        {% if findings %}<button class="expand-all-btn" onclick="toggleAll()">Expand All</button>{% endif %}
+        <h2>Findings (1)</h2>
+        <button class="expand-all-btn" onclick="toggleAll()">Expand All</button>
     </div>
 
-    {% for f in findings %}
-    {% set sev = f.severity | lower %}
-    {% set dismissed = f.status == 'dismissed' %}
-    {% if not dismissed %}
-    <div class="finding-card {{ sev }}" id="card-{{ loop.index }}">
-        <div class="finding-header" onclick="toggleCard('card-{{ loop.index }}')">
-            <span class="sev-badge sev-{{ sev }}">{{ f.severity }}</span>
-            <h3>[{{ f.type | upper }}] {{ f.url or f.file or 'Unknown' }}{% if f.parameter %} — <code style="color:#79c0ff;">{{ f.parameter }}</code>{% endif %}</h3>
-            {% if f.finding_type == 1 %}
-            <span class="type-badge type-verified">✓ Verified</span>
-            {% elif f.finding_type == 2 %}
-            <span class="type-badge type-candidate">⚠ Candidate</span>
-            {% else %}
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-1">
+        <div class="finding-header" onclick="toggleCard('card-1')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[SQLI] http://localhost/dvwa/vulnerabilities/sqli/ — <code style="color:#79c0ff;">id</code></h3>
+            
             <span class="type-badge type-detected">◎ Detected</span>
-            {% endif %}
+            
             <div class="confidence-bar">
-                <div class="conf-track"><div class="conf-fill" style="width:{{ (f.confidence * 100) | int }}%"></div></div>
-                <span>{{ (f.confidence * 100) | int }}%</span>
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
             </div>
             <span class="toggle-icon">▼</span>
         </div>
         <div class="finding-body">
             <div class="field-label">OWASP Category</div>
-            <div style="font-size:13px;">{{ f.owasp | e }}</div>
-            {% if f.evidence_static %}
-            <div class="field-label">Static Evidence</div>
-            <div class="evidence-block">{{ f.evidence_static | e }}</div>
-            {% endif %}
-            {% if f.evidence_dynamic %}
+            <div style="font-size:13px;">A03:2021 - Injection</div>
+            
+            
             <div class="field-label">Dynamic Evidence</div>
-            <div class="evidence-block">{{ f.evidence_dynamic | e }}</div>
-            {% if f.payload %}<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">{{ f.payload | e }}</code></div>{% endif %}
-            {% endif %}
-            {% if f.ai_note %}
-            <div class="field-label">AI Review Note</div>
-            <div class="ai-note-block">{{ f.ai_note | e }}</div>
-            {% endif %}
-            {% if f.remediation %}
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&#39;</code></div>
+            
+            
+            
             <div class="field-label">Remediation</div>
-            <div class="remediation-block">{{ f.remediation | e }}</div>
-            {% endif %}
+            <div class="remediation-block">To remediate the SQL injection vulnerability, the application should use prepared statements with parameterized queries to separate code from user input. For example, in PHP, the vulnerable code can be replaced with a prepared statement: `$stmt = $pdo-&gt;prepare(&#34;SELECT * FROM users WHERE id = :id&#34;); $stmt-&gt;bindParam(&#34;:id&#34;, $id);`. By using prepared statements, the application can prevent user input from being executed as SQL code, effectively mitigating the SQL injection vulnerability.</div>
+            
         </div>
     </div>
-    {% endif %}
-    {% endfor %}
+    
+    
 
-    {% if not findings %}
-    <div style="text-align:center;padding:40px;color:var(--text-muted);">No findings detected.</div>
-    {% endif %}
+    
 </div>
 
 <div class="footer">Generated by WebVulnScanner v1.0 — Academic Security Research Tool</div>
@@ -253,12 +241,12 @@ function toggleAll() {
 const firstCard = document.querySelector('.finding-card');
 if (firstCard) firstCard.classList.add('open');
 
-{% if findings %}
+
 const severityCounts = {
-    Critical: {{ findings | selectattr('severity', 'equalto', 'Critical') | rejectattr('status', 'equalto', 'dismissed') | list | length }},
-    High: {{ findings | selectattr('severity', 'equalto', 'High') | rejectattr('status', 'equalto', 'dismissed') | list | length }},
-    Medium: {{ findings | selectattr('severity', 'equalto', 'Medium') | rejectattr('status', 'equalto', 'dismissed') | list | length }},
-    Low: {{ findings | selectattr('severity', 'equalto', 'Low') | rejectattr('status', 'equalto', 'dismissed') | list | length }},
+    Critical: 1,
+    High: 0,
+    Medium: 0,
+    Low: 0,
 };
 const sevLabels = Object.keys(severityCounts).filter(k => severityCounts[k] > 0);
 const sevData = sevLabels.map(k => severityCounts[k]);
@@ -268,15 +256,15 @@ new Chart(document.getElementById('severityChart'), {
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8b949e', font: { size: 11 } } } } }
 });
 const typeCounts = {};
-{% for f in findings %}{% if f.status != 'dismissed' %}
-(function(){ const t = "{{ f.type | upper | e }}"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
-{% endif %}{% endfor %}
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
 new Chart(document.getElementById('typeChart'), {
     type: 'bar',
     data: { labels: Object.keys(typeCounts), datasets: [{ data: Object.values(typeCounts), backgroundColor: ['#58a6ff','#bc8cff','#39d353','#ff4444','#ff8c00','#f0c040'], borderRadius: 5 }] },
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8b949e' }, grid: { color: '#30363d' } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } } } }
 });
-{% endif %}
+
 </script>
 </body>
 </html>

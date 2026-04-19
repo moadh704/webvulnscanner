@@ -16,25 +16,32 @@ class Reporter:
     """
 
     def __init__(self, findings: list, output_dir: str,
-                 report_name: str = None):
-        self.findings    = findings
-        self.output_dir  = output_dir
-        self.report_name = report_name
-        self.scan_date   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                 report_name: str = None, output_format: str = 'both'):
+        self.findings      = findings
+        self.output_dir    = output_dir
+        self.report_name   = report_name
+        self.output_format = output_format
+        self.scan_date     = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def generate(self) -> dict:
-        """Generate both HTML and JSON reports. Returns output file paths."""
+        """Generate reports. Returns output file paths."""
         os.makedirs(self.output_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         prefix    = self.report_name if self.report_name else f"report_{timestamp}"
         html_path = os.path.join(self.output_dir, f"{prefix}.html")
         json_path = os.path.join(self.output_dir, f"{prefix}.json")
+        paths     = {}
 
-        self._generate_html(html_path)
-        self._generate_json(json_path)
+        if self.output_format in ('html', 'both'):
+            self._generate_html(html_path)
+            paths['html'] = html_path
 
-        return {'html': html_path, 'json': json_path}
+        if self.output_format in ('json', 'both'):
+            self._generate_json(json_path)
+            paths['json'] = json_path
+
+        return paths
 
     # ── HTML Report ───────────────────────────────────────────────────────────
 
@@ -75,6 +82,8 @@ class Reporter:
         """Export findings as structured JSON."""
         try:
             # Build clean JSON-serializable report
+            retained = [f for f in self.findings
+                        if f.get('status') != 'dismissed']
             report = {
                 'scan_info': {
                     'tool'       : 'WebVulnScanner v1.0',
@@ -82,25 +91,26 @@ class Reporter:
                     'target_url' : config.TARGET_URL,
                     'source_dir' : config.SOURCE_DIR,
                     'ai_provider': config.AI_PROVIDER,
-                    'total'      : len(self.findings),
+                    'total'      : len(retained),
+                    'dismissed'  : len(self.findings) - len(retained),
                     'summary'    : {
-                        'critical': sum(1 for f in self.findings
+                        'critical': sum(1 for f in retained
                                        if f.get('severity') == 'Critical'),
-                        'high'    : sum(1 for f in self.findings
+                        'high'    : sum(1 for f in retained
                                        if f.get('severity') == 'High'),
-                        'medium'  : sum(1 for f in self.findings
+                        'medium'  : sum(1 for f in retained
                                        if f.get('severity') == 'Medium'),
-                        'low'     : sum(1 for f in self.findings
+                        'low'     : sum(1 for f in retained
                                        if f.get('severity') == 'Low'),
-                        'type1'   : sum(1 for f in self.findings
+                        'type1'   : sum(1 for f in retained
                                        if f.get('finding_type') == 1),
-                        'type2'   : sum(1 for f in self.findings
+                        'type2'   : sum(1 for f in retained
                                        if f.get('finding_type') == 2),
-                        'type3'   : sum(1 for f in self.findings
+                        'type3'   : sum(1 for f in retained
                                        if f.get('finding_type') == 3),
                     }
                 },
-                'findings': [self._clean_finding(f) for f in self.findings]
+                'findings': [self._clean_finding(f) for f in retained]
             }
 
             with open(path, 'w', encoding='utf-8') as f:
