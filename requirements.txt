@@ -1,0 +1,21 @@
+# WebVulnScanner v1.0 - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Core HTTP & Crawling ──────────────────────────────────────────────────────
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# ── Static Analysis ───────────────────────────────────────────────────────────
+semgrep>=1.45.0
+
+# ── Report Generation ─────────────────────────────────────────────────────────
+jinja2>=3.1.0
+
+# ── AI Providers ─────────────────────────────────────────────────────────────
+groq>=0.4.0
+google-generativeai>=0.4.0
+
+# ── Terminal UI ───────────────────────────────────────────────────────────────
+rich>=13.0.0
+colorama>=0.4.6

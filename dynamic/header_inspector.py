@@ -125,7 +125,7 @@ class HeaderInspector:
                       risk, severity) -> dict:
         return {
             'type'             : 'headers',
-            'owasp'            : 'A05:2021 - Security Misconfiguration',
+            'owasp'            : 'A05:2025 - Security Misconfiguration',
             'url'              : url,
             'method'           : 'GET',
             'parameter'        : header,

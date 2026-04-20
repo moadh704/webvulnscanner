@@ -108,7 +108,7 @@ class IDOREnumerator:
                                   f"id={id_val} vs id={id_val + 1}")
                             findings.append({
                                 'type'            : 'idor',
-                                'owasp'           : 'A01:2021 - Broken Access Control',
+                                'owasp'           : 'A01:2025 - Broken Access Control',
                                 'url'             : id_url,
                                 'method'          : 'GET',
                                 'parameter'       : 'id',
@@ -334,7 +334,7 @@ class IDOREnumerator:
                       base_id, test_id, evidence) -> dict:
         return {
             'type'             : 'idor',
-            'owasp'            : 'A01:2021 - Broken Access Control',
+            'owasp'            : 'A01:2025 - Broken Access Control',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,

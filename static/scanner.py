@@ -152,7 +152,7 @@ class StaticScanner:
                 message    = r.get('extra', {}).get('message', '')
                 metadata   = r.get('extra', {}).get('metadata', {})
                 owasp      = metadata.get('owasp',
-                                          'A03:2021 - Injection')
+                                          'A03:2025 - Injection')
 
                 # Skip if module not active
                 if not self.scan_manager.is_active(vuln_type):

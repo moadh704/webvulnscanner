@@ -14,7 +14,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A01:2021 - Broken Access Control"
+      owasp: "A01:2025 - Broken Access Control"
       confidence: HIGH
       vuln_type: traversal
 
@@ -30,7 +30,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A01:2021 - Broken Access Control"
+      owasp: "A01:2025 - Broken Access Control"
       confidence: HIGH
       vuln_type: traversal
 
@@ -45,7 +45,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A01:2021 - Broken Access Control"
+      owasp: "A01:2025 - Broken Access Control"
       confidence: HIGH
       vuln_type: traversal
 
@@ -61,7 +61,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A01:2021 - Broken Access Control"
+      owasp: "A01:2025 - Broken Access Control"
       confidence: HIGH
       vuln_type: traversal
 
@@ -77,6 +77,6 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     metadata:
-      owasp: "A01:2021 - Broken Access Control"
+      owasp: "A01:2025 - Broken Access Control"
       confidence: HIGH
       vuln_type: traversal

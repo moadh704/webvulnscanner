@@ -260,7 +260,7 @@ class CMDiInjector:
                       method, evidence) -> dict:
         return {
             'type'             : 'cmdi',
-            'owasp'            : 'A03:2021 - Injection',
+            'owasp'            : 'A03:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,

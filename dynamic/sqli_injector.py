@@ -272,7 +272,7 @@ class SQLiInjector:
                       method, evidence) -> dict:
         return {
             'type'             : 'sqli',
-            'owasp'            : 'A03:2021 - Injection',
+            'owasp'            : 'A03:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,

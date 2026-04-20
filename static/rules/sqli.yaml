@@ -12,7 +12,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -28,7 +28,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -43,7 +43,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -58,7 +58,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: MEDIUM
       vuln_type: sqli
 
@@ -79,7 +79,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -94,7 +94,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -110,7 +110,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli
 
@@ -125,6 +125,6 @@ rules:
     languages: [javascript, typescript]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: sqli

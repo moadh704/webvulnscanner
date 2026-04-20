@@ -22,7 +22,6 @@ SKIP_URLS = [
     'setup.php', 'logout.php', 'phpinfo.php',
     'security.php', 'upload.php', 'brute/',
     'captcha', 'javascript/', 'cryptography',
-    'instructions.php',
 ]
 
 
@@ -210,7 +209,7 @@ class XSSInjector:
                       payload, evidence) -> dict:
         return {
             'type'             : 'xss',
-            'owasp'            : 'A03:2021 - Injection',
+            'owasp'            : 'A03:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,

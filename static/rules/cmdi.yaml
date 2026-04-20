@@ -13,7 +13,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -29,7 +29,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -44,7 +44,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -58,7 +58,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -74,7 +74,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -89,6 +89,6 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A03:2021 - Injection"
+      owasp: "A03:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi

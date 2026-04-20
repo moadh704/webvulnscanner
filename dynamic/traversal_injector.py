@@ -216,7 +216,7 @@ class TraversalInjector:
                       payload, evidence) -> dict:
         return {
             'type'             : 'traversal',
-            'owasp'            : 'A01:2021 - Broken Access Control',
+            'owasp'            : 'A01:2025 - Broken Access Control',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,
