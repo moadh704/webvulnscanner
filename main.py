@@ -129,8 +129,8 @@ class PhaseTracker:
             c.print()
             c.print(
                 Panel.fit(
-                    f"[bold cyan]WebVulnScanner v1.0[/bold cyan]  "
-                    f"[dim]Academic Security Research Tool[/dim]",
+                   f"[bold cyan]WebVulnScanner v1.0[/bold cyan]  "
+                   f"[dim]Hybrid Web Vulnerability Scanner[/dim]",
                     border_style="cyan"
                 )
             )
@@ -148,7 +148,7 @@ class PhaseTracker:
             c.print()
         else:
             print("=" * 60)
-            print("  WebVulnScanner v1.0 — Academic Security Research Tool")
+            print("WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner")
             print("=" * 60)
             print(f"  Target  : {target_url or 'N/A'}")
             print(f"  Mode    : {self.mode}")
