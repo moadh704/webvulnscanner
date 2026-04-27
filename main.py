@@ -431,15 +431,20 @@ def main():
         auth = None
         if args.username and args.password:
             parsed_target = urlparse(config.TARGET_URL)
-            base          = f"{parsed_target.scheme}://{parsed_target.netloc}"
-            login_url     = f"{base}/login.php"
+            # Detect application sub-path (e.g., /dvwa) so login.php
+            # resolves relative to the target, not the host root.
+            base_path = '/'.join(
+                parsed_target.path.rstrip('/').split('/')[:2]
+            )
+            login_url = (f"{parsed_target.scheme}://"
+                         f"{parsed_target.netloc}{base_path}/login.php")
             auth = {
                 'url'            : login_url,
                 'username_field' : 'username',
                 'password_field' : 'password',
                 'username'       : args.username,
                 'password'       : args.password,
-                'extra_fields'   : {}
+                'extra_fields'   : {'Login': 'Login'}   # DVWA-style submit button
             }
         elif 'dvwa' in config.TARGET_URL.lower():
             parsed_target = urlparse(config.TARGET_URL)
