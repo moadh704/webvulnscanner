@@ -1,12 +1,14 @@
 rules:
 
-  # ── PHP: system/exec with user input ────────────────────────────────────────
+  # ── PHP: system/exec with user input (single-line) ──────────────────────────
   - id: php-cmdi-system
     patterns:
       - pattern: system($_GET[$KEY]);
       - pattern: system($_POST[$KEY]);
+      - pattern: system($_REQUEST[$KEY]);
       - pattern: system($CMD . $_GET[$KEY]);
       - pattern: system($CMD . $_POST[$KEY]);
+      - pattern: system($CMD . $_REQUEST[$KEY]);
     message: >
       User input passed directly to system(). An attacker can inject
       arbitrary OS commands. Use escapeshellarg() or avoid shell calls.
@@ -21,8 +23,10 @@ rules:
     patterns:
       - pattern: exec($_GET[$KEY]);
       - pattern: exec($_POST[$KEY]);
+      - pattern: exec($_REQUEST[$KEY]);
       - pattern: exec($CMD . $_GET[$KEY], $OUT);
       - pattern: exec($CMD . $_POST[$KEY], $OUT);
+      - pattern: exec($CMD . $_REQUEST[$KEY], $OUT);
     message: >
       User input passed to exec(). Use escapeshellarg() to sanitize
       input or avoid executing OS commands from user data.
@@ -37,7 +41,10 @@ rules:
     patterns:
       - pattern: shell_exec($_GET[$KEY]);
       - pattern: shell_exec($_POST[$KEY]);
+      - pattern: shell_exec($_REQUEST[$KEY]);
       - pattern: shell_exec($CMD . $_GET[$KEY]);
+      - pattern: shell_exec($CMD . $_POST[$KEY]);
+      - pattern: shell_exec($CMD . $_REQUEST[$KEY]);
     message: >
       User input passed to shell_exec(). Sanitize with escapeshellarg()
       or use a safer alternative.
@@ -52,9 +59,91 @@ rules:
     patterns:
       - pattern: passthru($_GET[$KEY]);
       - pattern: passthru($_POST[$KEY]);
+      - pattern: passthru($_REQUEST[$KEY]);
       - pattern: passthru($CMD . $_GET[$KEY]);
+      - pattern: passthru($CMD . $_POST[$KEY]);
+      - pattern: passthru($CMD . $_REQUEST[$KEY]);
     message: >
       User input passed to passthru(). This allows OS command injection.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  # ── PHP: two-step taint — variable from GET/POST/REQUEST then shell call ────
+  # Matches DVWA-style code:
+  #   $target = $_REQUEST['ip'];
+  #   $cmd = shell_exec('ping ' . $target);
+  - id: php-cmdi-taint-shell-exec-get
+    pattern: |
+      $VAR = $_GET[$KEY];
+      ...
+      shell_exec($CMD . $VAR);
+    message: >
+      User input from $_GET assigned to variable then concatenated into
+      shell_exec(). This allows OS command injection. Use escapeshellarg().
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-taint-shell-exec-post
+    pattern: |
+      $VAR = $_POST[$KEY];
+      ...
+      shell_exec($CMD . $VAR);
+    message: >
+      User input from $_POST assigned to variable then concatenated into
+      shell_exec(). This allows OS command injection. Use escapeshellarg().
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-taint-shell-exec-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      shell_exec($CMD . $VAR);
+    message: >
+      User input from $_REQUEST assigned to variable then concatenated into
+      shell_exec(). This allows OS command injection. Use escapeshellarg().
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-taint-system-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      system($CMD . $VAR);
+    message: >
+      User input from $_REQUEST assigned to variable then used in system().
+      Sanitize with escapeshellarg() or avoid shell calls.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  - id: php-cmdi-taint-exec-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      exec($CMD . $VAR);
+    message: >
+      User input from $_REQUEST assigned to variable then used in exec().
+      Sanitize with escapeshellarg() or avoid shell calls.
     languages: [php]
     severity: ERROR
     metadata:

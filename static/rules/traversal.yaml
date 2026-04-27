@@ -1,12 +1,14 @@
 rules:
 
-  # ── PHP: include/require with user input ────────────────────────────────────
+  # ── PHP: include/require with user input (single-line) ──────────────────────
   - id: php-traversal-include
     patterns:
       - pattern: include($_GET[$KEY]);
       - pattern: include($_POST[$KEY]);
+      - pattern: include($_REQUEST[$KEY]);
       - pattern: include($PATH . $_GET[$KEY]);
       - pattern: include($PATH . $_POST[$KEY]);
+      - pattern: include($PATH . $_REQUEST[$KEY]);
     message: >
       User input passed directly to include(). An attacker can traverse
       the filesystem and include arbitrary files. Validate against a
@@ -22,8 +24,10 @@ rules:
     patterns:
       - pattern: require($_GET[$KEY]);
       - pattern: require($_POST[$KEY]);
+      - pattern: require($_REQUEST[$KEY]);
       - pattern: require($PATH . $_GET[$KEY]);
       - pattern: require($PATH . $_POST[$KEY]);
+      - pattern: require($PATH . $_REQUEST[$KEY]);
     message: >
       User input passed to require(). Validate against a whitelist
       of allowed file names to prevent path traversal.
@@ -38,10 +42,107 @@ rules:
     patterns:
       - pattern: file_get_contents($_GET[$KEY]);
       - pattern: file_get_contents($_POST[$KEY]);
+      - pattern: file_get_contents($_REQUEST[$KEY]);
       - pattern: file_get_contents($BASE . $_GET[$KEY]);
+      - pattern: file_get_contents($BASE . $_POST[$KEY]);
+      - pattern: file_get_contents($BASE . $_REQUEST[$KEY]);
     message: >
       User input used in file_get_contents() path. Sanitize the path
       and validate it stays within the expected directory.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  # ── PHP: two-step taint — variable from GET/POST/REQUEST then included ──────
+  # Matches DVWA-style code:
+  #   $file = $_GET['page'];
+  #   include($file);
+  - id: php-traversal-taint-include-get
+    pattern: |
+      $VAR = $_GET[$KEY];
+      ...
+      include($VAR);
+    message: >
+      User input from $_GET assigned to variable then passed to include().
+      An attacker can include arbitrary files. Validate against a whitelist.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-taint-include-post
+    pattern: |
+      $VAR = $_POST[$KEY];
+      ...
+      include($VAR);
+    message: >
+      User input from $_POST assigned to variable then passed to include().
+      An attacker can include arbitrary files. Validate against a whitelist.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-taint-include-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      include($VAR);
+    message: >
+      User input from $_REQUEST assigned to variable then passed to include().
+      An attacker can include arbitrary files. Validate against a whitelist.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-taint-include-concat-get
+    pattern: |
+      $VAR = $_GET[$KEY];
+      ...
+      include($PATH . $VAR);
+    message: >
+      User input from $_GET concatenated into include() path. Validate
+      the resolved path stays within the intended directory (use realpath).
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-taint-include-concat-request
+    pattern: |
+      $VAR = $_REQUEST[$KEY];
+      ...
+      include($PATH . $VAR);
+    message: >
+      User input from $_REQUEST concatenated into include() path. Validate
+      the resolved path stays within the intended directory (use realpath).
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  - id: php-traversal-taint-readfile-get
+    pattern: |
+      $VAR = $_GET[$KEY];
+      ...
+      readfile($VAR);
+    message: >
+      User input from $_GET assigned to variable then passed to readfile().
+      Validate the path against a whitelist.
     languages: [php]
     severity: ERROR
     metadata:

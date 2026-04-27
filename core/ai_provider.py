@@ -161,11 +161,25 @@ class AIEnhancer:
     Two roles:
     1. False Positive Reviewer — evaluates Type 2 unconfirmed findings
     2. Remediation Generator  — generates context-aware fix advice
+
+    The False Positive Reviewer adapts its strictness based on the scan
+    context: in hybrid mode (where dynamic evidence is available alongside
+    static), it applies strict review because unconfirmed findings are more
+    likely to be false positives. In static-only mode (where dynamic
+    confirmation is impossible by design), it applies lenient review and
+    retains findings as Candidates for manual code review.
     """
 
     def __init__(self):
         self.provider = get_provider()
+        # Detect scan context: if no target URL is set, we are in static-only
+        # mode; otherwise dynamic evidence is (potentially) available.
+        self.static_only_mode = not bool(getattr(config, 'TARGET_URL', ''))
         print(f"  [AI] Provider: {config.AI_PROVIDER}")
+        if self.static_only_mode:
+            print(f"  [AI] Mode: static-only (lenient review)")
+        else:
+            print(f"  [AI] Mode: hybrid/dynamic (strict review)")
 
     def enhance(self, findings: list) -> list:
         """Process all findings through the AI layer."""
@@ -197,27 +211,76 @@ class AIEnhancer:
         return findings
 
     def _review_false_positive(self, finding: dict) -> dict:
-        """Ask AI whether a Type 2 finding is real or a false positive."""
-        prompt = f"""A static code scanner flagged this as a potential \
+        """
+        Ask AI whether a Type 2 (Candidate) finding is real or a false positive.
+        Uses a context-aware prompt: lenient in static-only mode, strict in
+        hybrid mode where the absence of dynamic confirmation is meaningful.
+        """
+        # Build the most informative description from available fields.
+        # Static findings have their location encoded in 'url' (file path)
+        # and 'evidence_static' (line + code snippet metadata).
+        location = finding.get('url') or finding.get('file', 'unknown')
+        evidence = finding.get('evidence_static') or 'no static evidence'
+
+        if self.static_only_mode:
+            # ── Static-only mode ──────────────────────────────────────────
+            # No runtime confirmation is possible by design. The AI's job
+            # is to help triage candidates for code review, not enforce
+            # strict precision. We instruct it to favour retention.
+            prompt = f"""A static code scanner flagged this as a potential \
 {finding['type']} vulnerability (OWASP {finding['owasp']}):
 
-File     : {finding.get('file', 'unknown')}
-Line     : {finding.get('line', 'unknown')}
-Code     : {finding.get('code', 'N/A')}
-Evidence : {finding.get('evidence_static', 'N/A')}
+Location : {location}
+Evidence : {evidence}
 
-Is this a REAL vulnerability or a FALSE_POSITIVE?
+This scan is in STATIC-ONLY mode — no runtime confirmation is available.
+Your job is to help the developer triage findings for code review.
+
+Should this finding be RETAINED for review or is it clearly NOT_VULNERABLE?
+Be lenient: when in doubt, retain. Reply with exactly RETAIN or NOT_VULNERABLE
+followed by one sentence explanation.
+"""
+        else:
+            # ── Hybrid / dynamic-available mode ───────────────────────────
+            # Dynamic confirmation was attempted but did not trigger. This
+            # makes a false positive more likely. We instruct the AI to be
+            # strict.
+            prompt = f"""A static code scanner flagged this as a potential \
+{finding['type']} vulnerability (OWASP {finding['owasp']}):
+
+Location : {location}
+Evidence : {evidence}
+
+This scan is in HYBRID mode — dynamic injection was attempted at the
+corresponding endpoint but did NOT confirm exploitation.
+
+Is this still a REAL vulnerability (e.g., dynamically reachable but not
+exploited by our payloads) or a FALSE_POSITIVE (e.g., sanitized, dead code,
+or unreachable)?
+
 Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
 """
         response = self.provider.review_finding(prompt)
+        upper = response.upper()
 
-        if "FALSE_POSITIVE" in response.upper():
-            finding['status']     = 'dismissed'
-            finding['ai_note']    = response.strip()
+        if self.static_only_mode:
+            # In static-only mode, dismissal is much rarer.
+            if "NOT_VULNERABLE" in upper:
+                finding['status']  = 'dismissed'
+                finding['ai_note'] = response.strip()
+            else:
+                finding['status']     = 'warning'
+                finding['confidence'] = 0.55
+                finding['ai_note']    = response.strip()
         else:
-            finding['status']     = 'warning'
-            finding['confidence'] = 0.55   # AI-reviewed, slightly upgraded
-            finding['ai_note']    = response.strip()
+            # Hybrid mode: standard strict review.
+            if "FALSE_POSITIVE" in upper:
+                finding['status']  = 'dismissed'
+                finding['ai_note'] = response.strip()
+            else:
+                finding['status']     = 'warning'
+                finding['confidence'] = 0.55
+                finding['ai_note']    = response.strip()
 
         return finding
 

@@ -149,7 +149,7 @@ class StaticScanner:
                 file_path  = r.get('path', '')
                 line       = r.get('start', {}).get('line', 0)
                 code       = r.get('extra', {}).get('lines', '').strip()
-                message    = r.get('extra', {}).get('message', '')
+                message    = r.get('extra', {}).get('message', '').strip()
                 metadata   = r.get('extra', {}).get('metadata', {})
                 owasp      = metadata.get('owasp',
                                           'A03:2025 - Injection')
@@ -164,6 +164,17 @@ class StaticScanner:
                     continue
                 seen.add(key)
 
+                # Build informative evidence string for the AI reviewer.
+                # Includes the rule's own explanation (message) and the
+                # actual matched code line, so the AI has real context
+                # rather than just a file path.
+                evidence = (
+                    f"File: {file_path}, Line: {line}\n"
+                    f"Rule: {check_id}\n"
+                    f"Pattern: {message}\n"
+                    f"Matched code: {code}"
+                )
+
                 findings.append({
                     'type'             : vuln_type,
                     'owasp'            : owasp,
@@ -173,9 +184,7 @@ class StaticScanner:
                     'message'          : message,
                     'url'              : None,   # filled by correlator
                     'parameter'        : None,   # filled by correlator
-                    'evidence_static'  : f"File: {file_path}, "
-                                         f"Line: {line}, "
-                                         f"Code: {code}",
+                    'evidence_static'  : evidence,
                     'evidence_dynamic' : None,
                     'confidence'       : 0.40,   # awaits dynamic confirmation
                     'severity'         : SEVERITY_MAP.get(vuln_type,
