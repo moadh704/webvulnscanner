@@ -7,6 +7,7 @@ Usage:
     python main.py --url http://target.com --scan sqli,xss
     python main.py --url http://target.com --src ./source/ --scan sqli,cmdi
     python main.py --url http://target.com --no-ai --quiet
+    python main.py --url http://localhost/dvwa --difficulty high   (DVWA only)
 """
 
 import argparse
@@ -310,6 +311,14 @@ def parse_args():
         help="Login password\nExample: --password secret"
     )
     parser.add_argument(
+        "--difficulty", type=str, default=None,
+        choices=["low", "medium", "high", "impossible"],
+        help="DVWA security level to set after login\n"
+             "Options: low, medium, high, impossible\n"
+             "Example: --difficulty high\n"
+             "(DVWA targets only — ignored otherwise)"
+    )
+    parser.add_argument(
         "--ai-provider", type=str,
         choices=["groq", "gemini", "none"], default=None,
         help="AI provider override\nOptions: groq, gemini, none"
@@ -467,6 +476,20 @@ def main():
             crawl_url += '/index.php'
 
         crawler = Crawler(crawl_url, auth=auth)
+
+        # ── DVWA difficulty selection ─────────────────────────────────────
+        # If --difficulty is supplied AND the target is DVWA, the crawler
+        # authenticates first and then sets the security level. The level
+        # is bound to the session cookie, so all subsequent injector calls
+        # share that level.
+        if args.difficulty and 'dvwa' in crawl_url.lower():
+            with _QuietMode(quiet):
+                if auth:
+                    crawler._authenticate()
+                    crawler.set_dvwa_security_level(args.difficulty)
+                    # mark auth as already done so crawl() doesn't redo it
+                    crawler.auth = None
+
         with _QuietMode(quiet):
             endpoints = crawler.crawl()
 

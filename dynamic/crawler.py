@@ -23,6 +23,26 @@ API_WORDLIST = [
 ]
 
 
+# ── Destructive parameters / pages ────────────────────────────────────────────
+# These markers identify forms or endpoints that, if exercised by the
+# injectors, would damage the target application's state (wipe DB, change
+# password, log out, change difficulty, etc.). The crawler must never add
+# them as endpoints.
+DESTRUCTIVE_PARAM_NAMES = {
+    'create_db', 'reset_db', 'drop_db',
+    'security',                      # DVWA security level setter
+    'change',                        # password-change submit
+    'password_new', 'password_conf', # password-change fields
+    'logout', 'submit_logout',
+}
+
+DESTRUCTIVE_PATH_FRAGMENTS = [
+    'setup.php', 'logout.php', 'phpinfo.php',
+    'security.php',                  # DVWA difficulty page
+    'password.php',                  # DVWA password change
+]
+
+
 class Crawler:
     """
     Crawls the target web application and builds a list of endpoints.
@@ -31,7 +51,14 @@ class Crawler:
     - robots.txt / sitemap.xml parsing
     - REST API discovery via common path fuzzing
     - JSON response detection
+    - Destructive-form filtering (never adds DB-reset, security-level, or
+      password-change forms to the endpoint list)
+    - Optional DVWA security-level setter (call set_dvwa_security_level
+      after construction to choose Low / Medium / High / Impossible)
     """
+
+    # Pages that should never be visited — destructive or session-breaking
+    NEVER_VISIT = list(DESTRUCTIVE_PATH_FRAGMENTS)
 
     def __init__(self, base_url: str, auth: dict = None):
         self.base_url  = base_url.rstrip('/')
@@ -96,10 +123,56 @@ class Crawler:
         except Exception as e:
             print(f"  [Crawler] Authentication failed: {e}")
 
-    # Pages that should never be visited — destructive or session-breaking
-    NEVER_VISIT = [
-        'setup.php', 'logout.php', 'phpinfo.php',
-    ]
+    # ── DVWA security level setter ────────────────────────────────────────────
+
+    def set_dvwa_security_level(self, level: str) -> bool:
+        """
+        Set DVWA's session security level (low / medium / high / impossible).
+        Must be called AFTER _authenticate() and BEFORE crawl().
+        Posts to /security.php with the security parameter so the level
+        persists for all subsequent requests in this session.
+
+        Returns True on success, False otherwise.
+        """
+        level = level.lower()
+        if level not in ('low', 'medium', 'high', 'impossible'):
+            print(f"  [Crawler] Unknown DVWA level '{level}' — skipping.")
+            return False
+
+        # Build the security.php URL relative to the target's base path.
+        parsed     = urlparse(self.base_url)
+        base_path  = '/'.join(parsed.path.rstrip('/').split('/')[:2])
+        sec_url    = (f"{parsed.scheme}://{parsed.netloc}"
+                      f"{base_path}/security.php")
+
+        try:
+            # GET first so any CSRF / hidden tokens are picked up.
+            r1 = self.session.get(sec_url, timeout=config.REQUEST_TIMEOUT)
+            soup = BeautifulSoup(r1.text, 'html.parser')
+            post_data = {}
+            for hidden in soup.find_all('input', type='hidden'):
+                name = hidden.get('name')
+                if name:
+                    post_data[name] = hidden.get('value', '')
+            post_data['security']   = level
+            post_data['seclev_submit'] = 'Submit'  # DVWA submit button name
+
+            r2 = self.session.post(
+                sec_url, data=post_data,
+                timeout=config.REQUEST_TIMEOUT, allow_redirects=True
+            )
+            # DVWA echoes the new level back on the page after submit.
+            if level in r2.text.lower():
+                print(f"  [Crawler] DVWA security level set to: {level}")
+                return True
+            print(f"  [Crawler] Warning: could not confirm "
+                  f"DVWA level change to '{level}'.")
+            return False
+        except Exception as e:
+            print(f"  [Crawler] Setting DVWA level failed: {e}")
+            return False
+
+    # ── Visit logic ───────────────────────────────────────────────────────────
 
     def _visit(self, url: str):
         if not self._in_scope(url):
@@ -107,7 +180,7 @@ class Crawler:
         clean_url = url.split('#')[0]
 
         # Never visit destructive pages
-        if any(skip in clean_url for skip in self.NEVER_VISIT):
+        if self._is_destructive_url(clean_url):
             print(f"  [Crawler] Skipped (protected): {clean_url}")
             return
 
@@ -251,6 +324,27 @@ class Crawler:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+    def _is_destructive_url(self, url: str) -> bool:
+        """Check if a URL points to a destructive page (DB reset etc)."""
+        url_lower = url.lower()
+        return any(frag in url_lower for frag in DESTRUCTIVE_PATH_FRAGMENTS)
+
+    def _is_destructive_form(self, action_url: str, params: dict) -> bool:
+        """
+        Detect forms whose submission would damage the target — DB reset,
+        password change, security-level change, logout. These must never
+        be added to the endpoint list because the injectors would otherwise
+        POST malformed payloads to them and wipe / corrupt the test target.
+        """
+        # 1. Destructive page (e.g., setup.php)
+        if self._is_destructive_url(action_url):
+            return True
+        # 2. Destructive parameter present in form fields
+        param_keys_lower = {k.lower() for k in params.keys()}
+        if param_keys_lower & DESTRUCTIVE_PARAM_NAMES:
+            return True
+        return False
+
     def _is_json(self, response) -> bool:
         """Check if response contains JSON data."""
         content_type = response.headers.get('content-type', '')
@@ -278,12 +372,25 @@ class Crawler:
             name = tag.get('name')
             if name:
                 params[name] = tag.get('value', 'test')
+
+        # ── Destructive-form filter ───────────────────────────────────────
+        # Drop forms that would wipe the DB, reset the password, change the
+        # security level, or log the session out. This protects the target
+        # application from being damaged by the injectors that follow.
+        if self._is_destructive_form(action_url, params):
+            print(f"  [Crawler] Skipped destructive form: {action_url}")
+            return
+
         if params:
             self._add_endpoint(action_url, method, params)
 
     def _add_endpoint(self, url: str, method: str, params: dict):
         clean_url = url.split('#')[0]
         if not clean_url:
+            return
+        # Final defence: never add a destructive endpoint, even if it
+        # bypassed the form-level filter (e.g., GET-with-query-string).
+        if self._is_destructive_form(clean_url, params):
             return
         key = (clean_url, method, frozenset(params.keys()))
         if key not in {(e['url'], e['method'], frozenset(e['params'].keys()))
