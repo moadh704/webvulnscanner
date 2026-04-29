@@ -1,5 +1,6 @@
 # ── dynamic/xss_injector.py ──────────────────────────────────────────────────
 
+import html
 import requests
 from bs4 import BeautifulSoup
 
@@ -12,7 +13,6 @@ XSS_PAYLOADS = [
     "\"><script>alert(1)</script>",
     "'><script>alert(1)</script>",
     "<svg onload=alert(1)>",
-    "javascript:alert(1)",
     "<body onload=alert(1)>",
     "'\"><img src=x onerror=alert(1)>",
 ]
@@ -28,7 +28,14 @@ SKIP_URLS = [
 class XSSInjector:
     """
     Tests each endpoint parameter for Reflected XSS by injecting script
-    payloads and checking if they appear unencoded in the response body.
+    payloads and checking if they appear UNENCODED in the response body.
+
+    A reflection is considered exploitable only when the special
+    characters of the payload (<, >, ", ') survive the round-trip to the
+    server intact. If the application HTML-encodes the payload before
+    reflecting it (e.g. '&lt;script&gt;alert(1)&lt;/script&gt;'), the
+    finding is rejected — the payload may appear as text but cannot
+    execute as script.
     """
 
     def __init__(self, session: requests.Session,
@@ -126,36 +133,65 @@ class XSSInjector:
                     ep      = ep,
                     param   = param,
                     payload = payload,
-                    evidence= f"Payload reflected unencoded in response body"
+                    evidence= "Payload reflected unencoded in response body "
+                              "(special characters intact)"
                 )
         return None
 
     def _is_reflected(self, payload: str, body: str) -> bool:
         """
-        Check if the payload appears unencoded in the response.
-        We check for the raw payload AND key indicator strings.
+        Determine whether the payload was reflected in an exploitable form.
+
+        The check is two-step:
+
+        1. The raw payload must appear in the body — every byte intact.
+           If the body only contains an HTML-encoded variant of the
+           payload (e.g. '&lt;script&gt;') it is NOT exploitable, so we
+           never reach step 2 for that case.
+
+        2. The structurally-significant characters of the payload must
+           also appear in the body in their literal form. This guards
+           against partial reflection where the application strips the
+           tag delimiters but echoes the rest of the string.
+
+        Examples:
+          payload  = '<script>alert(1)</script>'
+          body 1   = '... <script>alert(1)</script> ...'    -> True  (vulnerable)
+          body 2   = '... &lt;script&gt;alert(1)&lt;/script&gt; ...'
+                                                            -> False (escaped)
+          body 3   = '... script alert 1 script ...'        -> False (stripped)
         """
-        # Direct reflection check
-        if payload in body:
-            return True
+        if not payload or not body:
+            return False
 
-        # Check for key script indicators that appear when payload is split
-        # across HTML attributes or broken by the app
-        indicators = [
-            "<script>alert",
-            "onerror=alert",
-            "onload=alert",
-            "<svg onload",
-            "javascript:alert",
-        ]
-        body_lower = body.lower()
-        for indicator in indicators:
-            if indicator.lower() in body_lower:
-                # Make sure it's our injection not part of the page itself
-                # by checking it's near the param value context
-                return True
+        # Step 1: raw payload present?
+        if payload not in body:
+            return False
 
-        return False
+        # Step 2: structural characters intact?
+        # The payload uses these characters to break out of context. If any
+        # of them are present in the payload, at least one literal copy must
+        # also appear in the body for the reflection to be exploitable.
+        structural_chars = ['<', '>', '"', "'"]
+        for ch in structural_chars:
+            if ch in payload and ch not in body:
+                return False
+
+        # Step 3: defence against the edge case where the application
+        # echoes BOTH the raw payload AND its encoded form (e.g. once in
+        # an error log and once as escaped HTML in the page). If the
+        # encoded version dominates, reject.
+        encoded = html.escape(payload, quote=True)
+        if encoded != payload:
+            # If the encoded variant is in the body but the raw payload
+            # appears fewer times than the encoded variant, the payload
+            # was almost certainly properly escaped and the raw match is
+            # incidental (e.g. inside a <textarea> echo of the input).
+            if encoded in body:
+                if body.count(encoded) >= body.count(payload):
+                    return False
+
+        return True
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 

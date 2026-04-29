@@ -158,16 +158,25 @@ def get_provider() -> AIProvider:
 class AIEnhancer:
     """
     Post-processing layer that operates on scored findings.
-    Two roles:
-    1. False Positive Reviewer — evaluates Type 2 unconfirmed findings
-    2. Remediation Generator  — generates context-aware fix advice
 
-    The False Positive Reviewer adapts its strictness based on the scan
-    context: in hybrid mode (where dynamic evidence is available alongside
-    static), it applies strict review because unconfirmed findings are more
-    likely to be false positives. In static-only mode (where dynamic
-    confirmation is impossible by design), it applies lenient review and
-    retains findings as Candidates for manual code review.
+    Three roles:
+    1. Static False Positive Reviewer — evaluates Type 2 (Candidate) findings
+       from the static engine and dismisses those that are clearly safe.
+    2. Dynamic False Positive Reviewer — evaluates Type 3 (Detected) findings
+       from the dynamic injectors. Specifically targets common runtime false
+       positives such as XSS where the payload appears in the response but
+       was actually HTML-escaped before reflection.
+    3. Remediation Generator — generates context-aware fix advice for every
+       retained finding.
+
+    Type 1 (Verified) findings are NEVER reviewed: if both static and dynamic
+    pipelines confirmed the same vulnerability at the same endpoint, the
+    evidence is strong enough that further review would only add noise.
+
+    Static review is mode-aware: in static-only scans the AI is lenient
+    (favours retention so the developer can triage in code review); in
+    hybrid/dynamic scans it is strict (the absence of dynamic confirmation
+    is a meaningful signal that the static match is likely a false positive).
     """
 
     def __init__(self):
@@ -193,10 +202,17 @@ class AIEnhancer:
         print(f"  [AI] Processing {len(findings)} finding(s)...")
 
         for i, finding in enumerate(findings):
+            ftype = finding.get('finding_type')
 
-            # Step 1: Review Type 2 findings for false positives
-            if finding.get('finding_type') == 2:
-                finding = self._review_false_positive(finding)
+            # Step 1a: Review Type 2 (Candidate) — static-only matches
+            if ftype == 2:
+                finding = self._review_static_candidate(finding)
+
+            # Step 1b: Review Type 3 (Detected) — dynamic-only matches
+            # for vulnerability classes prone to runtime false positives
+            # (XSS reflection without checking encoding being the main one).
+            elif ftype == 3 and self._needs_dynamic_review(finding):
+                finding = self._review_dynamic_detection(finding)
 
             # Step 2: Generate remediation for all retained findings
             if finding.get('status') != 'dismissed':
@@ -210,23 +226,18 @@ class AIEnhancer:
 
         return findings
 
-    def _review_false_positive(self, finding: dict) -> dict:
+    # ── Type 2 (static candidate) review ──────────────────────────────────────
+
+    def _review_static_candidate(self, finding: dict) -> dict:
         """
         Ask AI whether a Type 2 (Candidate) finding is real or a false positive.
         Uses a context-aware prompt: lenient in static-only mode, strict in
         hybrid mode where the absence of dynamic confirmation is meaningful.
         """
-        # Build the most informative description from available fields.
-        # Static findings have their location encoded in 'url' (file path)
-        # and 'evidence_static' (line + code snippet metadata).
         location = finding.get('url') or finding.get('file', 'unknown')
         evidence = finding.get('evidence_static') or 'no static evidence'
 
         if self.static_only_mode:
-            # ── Static-only mode ──────────────────────────────────────────
-            # No runtime confirmation is possible by design. The AI's job
-            # is to help triage candidates for code review, not enforce
-            # strict precision. We instruct it to favour retention.
             prompt = f"""A static code scanner flagged this as a potential \
 {finding['type']} vulnerability (OWASP {finding['owasp']}):
 
@@ -241,10 +252,6 @@ Be lenient: when in doubt, retain. Reply with exactly RETAIN or NOT_VULNERABLE
 followed by one sentence explanation.
 """
         else:
-            # ── Hybrid / dynamic-available mode ───────────────────────────
-            # Dynamic confirmation was attempted but did not trigger. This
-            # makes a false positive more likely. We instruct the AI to be
-            # strict.
             prompt = f"""A static code scanner flagged this as a potential \
 {finding['type']} vulnerability (OWASP {finding['owasp']}):
 
@@ -264,7 +271,6 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
         upper = response.upper()
 
         if self.static_only_mode:
-            # In static-only mode, dismissal is much rarer.
             if "NOT_VULNERABLE" in upper:
                 finding['status']  = 'dismissed'
                 finding['ai_note'] = response.strip()
@@ -273,7 +279,6 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
                 finding['confidence'] = 0.55
                 finding['ai_note']    = response.strip()
         else:
-            # Hybrid mode: standard strict review.
             if "FALSE_POSITIVE" in upper:
                 finding['status']  = 'dismissed'
                 finding['ai_note'] = response.strip()
@@ -283,6 +288,90 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
                 finding['ai_note']    = response.strip()
 
         return finding
+
+    # ── Type 3 (dynamic detection) review ─────────────────────────────────────
+
+    def _needs_dynamic_review(self, finding: dict) -> bool:
+        """
+        Decide whether a Type 3 finding needs a second-pass AI review.
+        We focus on vulnerability classes where the simple "payload present
+        in response" heuristic is known to produce false positives:
+          - XSS: payload may appear but be HTML-escaped (e.g., '&lt;' instead
+                 of '<'), in which case it is NOT exploitable
+          - SQLi error-based: a generic error message may appear in the page
+                 for unrelated reasons
+          - traversal: file path may reflect without actual file disclosure
+        IDOR, CMDi, and headers have stronger evidence and skip review.
+        """
+        return finding.get('type') in ('xss', 'sqli', 'traversal')
+
+    def _review_dynamic_detection(self, finding: dict) -> dict:
+        """
+        Ask AI whether a Type 3 (Detected) finding represents a real
+        exploitation or whether the dynamic injector misread escaped /
+        encoded output as successful injection.
+        """
+        url      = finding.get('url', '?')
+        param    = finding.get('parameter', '?')
+        payload  = finding.get('payload', '?')
+        evidence = finding.get('evidence_dynamic') or 'no dynamic evidence'
+        vuln     = finding.get('type', 'unknown')
+
+        # Tailored guidance per vulnerability class to make the AI's job
+        # focused rather than generic.
+        if vuln == 'xss':
+            extra = (
+                "An XSS finding is REAL only if the payload appears in the "
+                "response with its special characters intact (e.g., literal "
+                "'<' and '>'). If the payload was reflected but with characters "
+                "HTML-encoded ('&lt;', '&#60;', '&amp;', etc.), the application "
+                "is correctly escaping output and the finding is a "
+                "FALSE_POSITIVE."
+            )
+        elif vuln == 'sqli':
+            extra = (
+                "A SQLi finding is REAL only if the response shows actual "
+                "SQL behaviour (database error, structural change in returned "
+                "rows, or measurable time delay). A generic 500 error or an "
+                "unrelated message echoing the payload is a FALSE_POSITIVE."
+            )
+        elif vuln == 'traversal':
+            extra = (
+                "A path-traversal finding is REAL only if the response "
+                "contains genuine content from outside the application "
+                "directory (e.g., contents of /etc/passwd, win.ini). If the "
+                "response merely echoes the path string or returns the same "
+                "page as legitimate input, it is a FALSE_POSITIVE."
+            )
+        else:
+            extra = ""
+
+        prompt = f"""A dynamic injector flagged a {vuln} vulnerability \
+(OWASP {finding.get('owasp', '')}):
+
+URL              : {url}
+Parameter        : {param}
+Injected payload : {payload}
+Dynamic evidence : {evidence}
+
+{extra}
+
+Based on the evidence above, is this a REAL exploitation or a FALSE_POSITIVE?
+Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
+"""
+        response = self.provider.review_finding(prompt)
+        upper = response.upper()
+
+        if "FALSE_POSITIVE" in upper:
+            finding['status']  = 'dismissed'
+            finding['ai_note'] = response.strip()
+        else:
+            # Retained — note the AI's reasoning for transparency in the report
+            finding['ai_note'] = response.strip()
+
+        return finding
+
+    # ── Remediation generation ────────────────────────────────────────────────
 
     def _generate_remediation(self, finding: dict) -> dict:
         """Generate context-specific remediation advice."""
