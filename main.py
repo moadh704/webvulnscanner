@@ -435,40 +435,46 @@ def main():
 
         # ── Crawl ─────────────────────────────────────────────────────────────
         tracker.phase("Crawling Target", config.TARGET_URL)
-        from dynamic.crawler import Crawler
+        from dynamic.crawler import Crawler, detect_login_form
 
+        # Build the auth dict if credentials are supplied OR if the target
+        # is DVWA (in which case we use its well-known default credentials).
+        # Login-form field names are auto-detected from the page itself so
+        # the same code path works for DVWA, bWAPP, Mutillidae, and any
+        # other application — no per-target hardcoding.
         auth = None
-        if args.username and args.password:
+        if (args.username and args.password) or \
+           'dvwa' in config.TARGET_URL.lower():
+            # Resolve credentials: explicit args win, otherwise fall back
+            # to DVWA's well-known defaults so the no-flag invocation
+            # against DVWA still works.
+            if args.username and args.password:
+                creds_user, creds_pass = args.username, args.password
+            else:
+                creds_user, creds_pass = 'admin', 'password'
+
             parsed_target = urlparse(config.TARGET_URL)
-            # Detect application sub-path (e.g., /dvwa) so login.php
+            # Detect application sub-path (e.g., /dvwa, /bWAPP) so login.php
             # resolves relative to the target, not the host root.
             base_path = '/'.join(
                 parsed_target.path.rstrip('/').split('/')[:2]
             )
             login_url = (f"{parsed_target.scheme}://"
                          f"{parsed_target.netloc}{base_path}/login.php")
+
+            # Auto-detect the login form's field names by reading the page.
+            # This lets the scanner authenticate against any app without
+            # per-target hardcoding of input names.
+            with _QuietMode(quiet):
+                detected = detect_login_form(login_url)
+
             auth = {
                 'url'            : login_url,
-                'username_field' : 'username',
-                'password_field' : 'password',
-                'username'       : args.username,
-                'password'       : args.password,
-                'extra_fields'   : {'Login': 'Login'}   # DVWA-style submit button
-            }
-        elif 'dvwa' in config.TARGET_URL.lower():
-            parsed_target = urlparse(config.TARGET_URL)
-            base_path = '/'.join(
-                parsed_target.path.rstrip('/').split('/')[:2]
-            )
-            login_url = (f"{parsed_target.scheme}://"
-                         f"{parsed_target.netloc}{base_path}/login.php")
-            auth = {
-                'url'            : login_url,
-                'username_field' : 'username',
-                'password_field' : 'password',
-                'username'       : 'admin',
-                'password'       : 'password',
-                'extra_fields'   : {'Login': 'Login'}
+                'username'       : creds_user,
+                'password'       : creds_pass,
+                'username_field' : detected['username_field'],
+                'password_field' : detected['password_field'],
+                'extra_fields'   : detected['extra_fields'],
             }
 
         crawl_url = config.TARGET_URL.rstrip('/')

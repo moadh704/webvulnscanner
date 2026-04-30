@@ -43,11 +43,102 @@ DESTRUCTIVE_PATH_FRAGMENTS = [
 ]
 
 
+# ── Login form auto-detection ─────────────────────────────────────────────────
+
+def detect_login_form(login_url: str, timeout: int = 10) -> dict:
+    """
+    Inspect a login page and auto-detect its form fields.
+
+    Different intentionally-vulnerable applications use different field
+    names: DVWA's form uses 'username'/'password' with a 'Login' submit
+    button; bWAPP uses 'login'/'password' with 'form=submit'; Mutillidae
+    uses its own naming scheme; etc. Rather than hardcode each target,
+    we fetch the login page once and read the names off the actual HTML.
+
+    Returns a dict with three keys:
+      - username_field : name attribute of the username/login input
+      - password_field : name attribute of the password input
+      - extra_fields   : {name: value} for the form's submit button so we
+                         replay it exactly as the server expects
+
+    Hidden CSRF / session tokens are NOT captured here — _authenticate()
+    already harvests them at login time.
+
+    If the page cannot be fetched or no form with a password field is
+    found, falls back to the most common defaults so the caller still
+    gets a usable dict and the rest of the pipeline can proceed.
+    """
+    fallback = {
+        'username_field' : 'username',
+        'password_field' : 'password',
+        'extra_fields'   : {},
+    }
+
+    try:
+        resp = requests.get(
+            login_url,
+            timeout=timeout,
+            headers=config.REQUEST_HEADERS,
+            allow_redirects=True,
+        )
+        soup = BeautifulSoup(resp.text, 'html.parser')
+    except Exception as e:
+        print(f"  [Auth] Could not fetch login page for detection: {e}")
+        return fallback
+
+    # The login form is the form that contains a password input.
+    login_form = None
+    for form in soup.find_all('form'):
+        if form.find('input', {'type': 'password'}):
+            login_form = form
+            break
+    if login_form is None:
+        print(f"  [Auth] No password form found on login page — "
+              f"using defaults.")
+        return fallback
+
+    # Password field — read the name straight off the type=password input.
+    pw_input       = login_form.find('input', {'type': 'password'})
+    password_field = pw_input.get('name') or 'password'
+
+    # Username field — first text/email input in the form. Login forms
+    # almost always place the username before the password input.
+    username_field = 'username'
+    for inp in login_form.find_all('input'):
+        itype = (inp.get('type') or 'text').lower()
+        if itype in ('text', 'email') and inp.get('name'):
+            username_field = inp['name']
+            break
+
+    # Submit control — capture name + value so the request is byte-for-byte
+    # what the browser would send (some apps gate on a specific name=value,
+    # e.g. bWAPP requires form=submit).
+    extra_fields = {}
+    submit = (
+        login_form.find('button', {'type': 'submit'})
+        or login_form.find('input', {'type': 'submit'})
+        or login_form.find('button')
+    )
+    if submit and submit.get('name'):
+        extra_fields[submit['name']] = submit.get('value') or 'submit'
+
+    print(f"  [Auth] Detected login form: "
+          f"user='{username_field}', pass='{password_field}', "
+          f"submit={extra_fields or '(none)'}")
+
+    return {
+        'username_field' : username_field,
+        'password_field' : password_field,
+        'extra_fields'   : extra_fields,
+    }
+
+
 class Crawler:
     """
     Crawls the target web application and builds a list of endpoints.
     Supports:
-    - Form-based authentication (DVWA)
+    - Form-based authentication (DVWA, bWAPP, Mutillidae, ...)
+    - Auto-detected login form fields (see detect_login_form)
     - robots.txt / sitemap.xml parsing
     - REST API discovery via common path fuzzing
     - JSON response detection
