@@ -11,8 +11,6 @@ CMD_PATTERNS = [
     "root:",            # /etc/passwd
     "uid=",             # id command output
     "gid=",             # id command output
-    "windows",          # Windows system info
-    "win32",            # Windows
     "volume serial",    # Windows dir output
     "directory of",     # Windows dir output
     "/bin/",            # Linux path in output
