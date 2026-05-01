@@ -98,6 +98,45 @@ rules:
       confidence: HIGH
       vuln_type: sqli
 
+  # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
+  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
+  - id: php-sqli-taint-ternary
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $VAR = $COND ? $_GET[$KEY] : $X;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $VAR = $COND ? $X : $_GET[$KEY];
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $VAR = $COND ? $_POST[$KEY] : $X;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $VAR = $COND ? $X : $_POST[$KEY];
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $VAR = $COND ? $_REQUEST[$KEY] : $X;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $VAR = $COND ? $X : $_REQUEST[$KEY];
+              ...
+              mysqli_query($CONN, $QUERY);
+    message: >
+      User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
+      mysqli_query(). Use prepared statements with bound parameters.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: MEDIUM
+      vuln_type: sqli
+
   # ── Python: string concatenation in execute() ───────────────────────────────
   - id: python-sqli-execute-concat
     patterns:
