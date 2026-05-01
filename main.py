@@ -462,14 +462,16 @@ def main():
             login_url = (f"{parsed_target.scheme}://"
                          f"{parsed_target.netloc}{base_path}/login.php")
 
-            # Auto-detect the login form's field names by reading the page.
-            # This lets the scanner authenticate against any app without
-            # per-target hardcoding of input names.
+            # Auto-detect the login form's field names AND its effective
+            # URL by reading the page. Mutillidae routes login through
+            # /index.php?page=login.php rather than /login.php directly,
+            # so detect_login_form may return a different URL than the
+            # default we pass in.
             with _QuietMode(quiet):
                 detected = detect_login_form(login_url)
 
             auth = {
-                'url'            : login_url,
+                'url'            : detected['login_url'],
                 'username'       : creds_user,
                 'password'       : creds_pass,
                 'username_field' : detected['username_field'],

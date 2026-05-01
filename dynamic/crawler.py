@@ -36,10 +36,22 @@ DESTRUCTIVE_PARAM_NAMES = {
     'logout', 'submit_logout',
 }
 
+# Destructive substrings to match against the URL itself. These cover both
+# DVWA's per-page destructives (setup.php, security.php) and Mutillidae's
+# query-string-based destructives (?do=toggle-enforce-ssl, ?do=logout, etc.)
+# which are not separate pages but verbs against index.php.
 DESTRUCTIVE_PATH_FRAGMENTS = [
     'setup.php', 'logout.php', 'phpinfo.php',
     'security.php',                  # DVWA difficulty page
     'password.php',                  # DVWA password change
+    # Mutillidae: query-string actions on index.php that mutate session state
+    'do=toggle-enforce-ssl',         # forces session to HTTPS — breaks crawl
+    'do=toggle-security',            # changes security level
+    'do=toggle-hints',               # toggles hint mode
+    'do=logout',                     # ends session
+    'do=reset-database',             # wipes DB
+    # Mutillidae: setup page (separate from DVWA's setup.php)
+    'set-up-database.php',
 ]
 
 
@@ -477,7 +489,10 @@ class Crawler:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _is_destructive_url(self, url: str) -> bool:
-        """Check if a URL points to a destructive page (DB reset etc)."""
+        """Check if a URL points to a destructive page (DB reset etc).
+        Compares against DESTRUCTIVE_PATH_FRAGMENTS — these match against
+        the full URL string (not just the path), so query-string-based
+        destructives like '?do=toggle-enforce-ssl' are caught too."""
         url_lower = url.lower()
         return any(frag in url_lower for frag in DESTRUCTIVE_PATH_FRAGMENTS)
 

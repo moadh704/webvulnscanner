@@ -9,8 +9,6 @@ import config
 # ── Output patterns that confirm command execution ────────────────────────────
 CMD_PATTERNS = [
     "root:",            # /etc/passwd
-    "uid=",             # id command output
-    "gid=",             # id command output
     "volume serial",    # Windows dir output
     "directory of",     # Windows dir output
     "/bin/",            # Linux path in output
