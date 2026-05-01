@@ -292,19 +292,27 @@ class Crawler:
             return
         print(f"  [Crawler] Visited: {url} [{response.status_code}]")
 
+        # Use the final URL after any server-side redirects as the base for
+        # resolving relative links. Without this, a redirect from
+        # /mutillidae → /mutillidae/index.php causes urljoin to produce
+        # /index.php?page=X (wrong path) instead of /mutillidae/index.php?page=X.
+        effective_url = response.url.split('#')[0]
+        if effective_url != clean_url:
+            self.visited.add(effective_url)
+
         # Check if JSON response — it's an API endpoint
         if self._is_json(response):
-            self._add_api_endpoint(url)
+            self._add_api_endpoint(effective_url)
 
         soup = BeautifulSoup(response.text, 'html.parser')
-        parsed = urlparse(url)
+        parsed = urlparse(effective_url)
         if parsed.query:
             params = parse_qs(parsed.query)
-            self._add_endpoint(url, "GET", {k: v[0] for k, v in params.items()})
+            self._add_endpoint(effective_url, "GET", {k: v[0] for k, v in params.items()})
         for form in soup.find_all('form'):
-            self._process_form(url, form)
+            self._process_form(effective_url, form)
         for tag in soup.find_all('a', href=True):
-            full_url = urljoin(url, tag['href'].strip())
+            full_url = urljoin(effective_url, tag['href'].strip())
             self._visit(full_url)
 
     # ── REST API Discovery ────────────────────────────────────────────────────
