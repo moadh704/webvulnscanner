@@ -163,9 +163,9 @@ class AIEnhancer:
     1. Static False Positive Reviewer — evaluates Type 2 (Candidate) findings
        from the static engine and dismisses those that are clearly safe.
     2. Dynamic False Positive Reviewer — evaluates Type 3 (Detected) findings
-       from the dynamic injectors. Specifically targets common runtime false
-       positives such as XSS where the payload appears in the response but
-       was actually HTML-escaped before reflection.
+       from the dynamic injectors. Targets vulnerability classes prone to
+       runtime false positives where the simple "pattern present in response"
+       heuristic can misfire.
     3. Remediation Generator — generates context-aware fix advice for every
        retained finding.
 
@@ -209,8 +209,7 @@ class AIEnhancer:
                 finding = self._review_static_candidate(finding)
 
             # Step 1b: Review Type 3 (Detected) — dynamic-only matches
-            # for vulnerability classes prone to runtime false positives
-            # (XSS reflection without checking encoding being the main one).
+            # for vulnerability classes prone to runtime false positives.
             elif ftype == 3 and self._needs_dynamic_review(finding):
                 finding = self._review_dynamic_detection(finding)
 
@@ -294,16 +293,25 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
     def _needs_dynamic_review(self, finding: dict) -> bool:
         """
         Decide whether a Type 3 finding needs a second-pass AI review.
-        We focus on vulnerability classes where the simple "payload present
+        We focus on vulnerability classes where the simple "pattern present
         in response" heuristic is known to produce false positives:
-          - XSS: payload may appear but be HTML-escaped (e.g., '&lt;' instead
-                 of '<'), in which case it is NOT exploitable
-          - SQLi error-based: a generic error message may appear in the page
-                 for unrelated reasons
+          - XSS:       payload may appear but be HTML-escaped (e.g., '&lt;'
+                       instead of '<'), in which case it is NOT exploitable
+          - SQLi:      a generic error message may appear in the page for
+                       reasons unrelated to actual SQL behaviour
           - traversal: file path may reflect without actual file disclosure
-        IDOR, CMDi, and headers have stronger evidence and skip review.
+          - CMDi:      patterns like 'uid=' or 'gid=' may appear as part of
+                       normal HTML content (e.g., a logged-in user banner)
+                       rather than as command output
+          - IDOR:      a difference between sequential IDs may reflect
+                       legitimate distinct resources rather than a missing
+                       authorization check
+        Headers findings are objective (header present or absent) and skip
+        review.
         """
-        return finding.get('type') in ('xss', 'sqli', 'traversal')
+        return finding.get('type') in (
+            'xss', 'sqli', 'traversal', 'cmdi', 'idor'
+        )
 
     def _review_dynamic_detection(self, finding: dict) -> dict:
         """
@@ -342,6 +350,33 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
                 "directory (e.g., contents of /etc/passwd, win.ini). If the "
                 "response merely echoes the path string or returns the same "
                 "page as legitimate input, it is a FALSE_POSITIVE."
+            )
+        elif vuln == 'cmdi':
+            extra = (
+                "A CMDi finding is REAL only if the response contains output "
+                "that could only come from actual command execution (e.g., "
+                "the literal string 'www-data' from `whoami`, a directory "
+                "listing produced by `dir` or `ls`, the contents of "
+                "/etc/passwd from `cat`, or a measurable time delay from "
+                "`sleep`). If the matched pattern (e.g., 'uid=', 'gid=', "
+                "'/bin/', '/usr/') appears as part of NORMAL HTML content — "
+                "such as a logged-in user banner that displays a user's "
+                "uid/gid number for display purposes, a navigation menu "
+                "item that mentions a path, or a help text that references "
+                "a system directory — this is a FALSE_POSITIVE: the command "
+                "was never executed, the pattern just happens to be present "
+                "in the page text."
+            )
+        elif vuln == 'idor':
+            extra = (
+                "An IDOR finding is REAL only if iterating an integer "
+                "identifier returns data that should belong to different "
+                "users / accounts / resources than the authenticated user "
+                "is authorised to see, indicating a missing authorisation "
+                "check. If sequential IDs simply return distinct legitimate "
+                "resources of the same kind (e.g., /api/Products/1 and "
+                "/api/Products/2 both being public product listings), this "
+                "is expected catalogue behaviour and a FALSE_POSITIVE."
             )
         else:
             extra = ""
