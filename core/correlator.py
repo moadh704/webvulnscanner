@@ -1,6 +1,7 @@
 # ── core/correlator.py ───────────────────────────────────────────────────────
 
 import os
+from urllib.parse import urlparse, parse_qs
 
 # ── CVSS base severity per vulnerability type ─────────────────────────────────
 CVSS_BASE = {
@@ -26,6 +27,13 @@ TECHNIQUE_PRIORITY = {
     'time-based'          : 2,
     'boolean-based'       : 1,
 }
+
+# ── Query parameters that reference files (router-style apps) ────────────────
+# Mutillidae routes pages through ?page=X.php; bWAPP uses ?bug=X; many
+# legacy PHP apps use ?file=, ?doc=, ?path=. Treat their values as
+# additional URL path components for correlation.
+ROUTING_PARAMS = {'page', 'file', 'doc', 'path', 'include', 'redirect',
+                  'bug', 'view', 'load'}
 
 
 class Correlator:
@@ -83,7 +91,11 @@ class Correlator:
                     best_score = score
                     best_sf    = sf
 
-            if best_sf and best_score > 0:
+            # Require score >= 2 to upgrade. A bare directory-name overlap
+            # (score == 1) is too weak — it correlates everything in an
+            # application to everything else. We need at least one
+            # vulnerability-specific path component matching.
+            if best_sf and best_score >= 2:
                 # Upgrade to Type 1
                 result[key]['finding_type']   = 1
                 result[key]['confidence']      = 0.90
@@ -155,6 +167,21 @@ class Correlator:
         """
         Return a numeric match score between a static and dynamic finding.
         Higher score = better match. 0 = no match.
+
+        Algorithm:
+          1. Both findings must share the same vuln_type.
+          2. Build sets of "meaningful" path components from the static
+             file path and the dynamic URL path (skipping common
+             directories and the file extension).
+          3. For router-style apps where the actual page is referenced
+             by query string (e.g. ?page=dns-lookup.php), parse those
+             routing parameters and add their basenames to the URL
+             component set so router-based URLs can correlate to the
+             static-analyzed source files they dispatch to.
+          4. Return the count of overlapping components.
+
+        See ROUTING_PARAMS above for the list of recognized routing
+        query parameter names.
         """
         if sf.get('type') != df.get('type'):
             return 0
@@ -169,25 +196,63 @@ class Correlator:
             'xampp', 'users', 'dell', 'desktop',
         }
 
-        file_parts = [
-            p for p in file_path.split('/')
-            if p and len(p) > 2
-            and p not in SKIP_SEGMENTS
-            and not p.endswith('.php')
-            and not p.endswith('.py')
-        ]
+        # File path components (filename basename minus the .php extension
+        # is included; intermediate directories that survive the SKIP filter
+        # are also included).
+        file_parts = []
+        for p in file_path.split('/'):
+            if not p or len(p) <= 2:
+                continue
+            if p in SKIP_SEGMENTS:
+                continue
+            # Strip extensions so "dns-lookup.php" matches "dns-lookup"
+            base = self._strip_ext(p)
+            if base and base not in SKIP_SEGMENTS:
+                file_parts.append(base)
 
-        from urllib.parse import urlparse
-        url_path  = urlparse(url).path.lower()
-        url_parts = [p for p in url_path.split('/') if p and len(p) > 2]
+        # URL components: path segments + values from routing query parameters.
+        parsed    = urlparse(url)
+        url_path  = parsed.path
+        url_parts = [p for p in url_path.split('/')
+                     if p and len(p) > 2]
+
+        # Strip trailing extension from URL path components too
+        url_parts = [self._strip_ext(p) for p in url_parts]
+
+        # Add routing-param values (e.g. ?page=dns-lookup.php → "dns-lookup")
+        if parsed.query:
+            qs = parse_qs(parsed.query)
+            for param_name, values in qs.items():
+                if param_name.lower() in ROUTING_PARAMS:
+                    for value in values:
+                        # Take the basename (strip path), then strip extension
+                        basename = value.replace('\\', '/').split('/')[-1]
+                        basename = self._strip_ext(basename.lower())
+                        if basename and len(basename) > 2:
+                            url_parts.append(basename)
+
+        # Filter out skipped segments from URL parts as well (e.g. drop
+        # "dvwa" / "mutillidae" / "index" so they don't inflate the score)
+        url_parts_set = set(p for p in url_parts if p not in SKIP_SEGMENTS)
+
+        # Same filter for file_parts (drop app dir name like "dvwa"/"mutillidae")
+        file_parts_set = set(p for p in file_parts if p not in SKIP_SEGMENTS)
 
         # Count overlapping meaningful segments
-        score = sum(1 for part in file_parts if part in url_parts)
+        score = len(file_parts_set & url_parts_set)
         return score
 
+    @staticmethod
+    def _strip_ext(s: str) -> str:
+        """Strip a known web-source-file extension if present."""
+        for ext in ('.php', '.py', '.js', '.html'):
+            if s.endswith(ext):
+                return s[:-len(ext)]
+        return s
+
     def _static_matches_dynamic(self, sf: dict, df: dict) -> bool:
-        """Convenience wrapper — returns True if score > 0."""
-        return self._match_score(sf, df) > 0
+        """Convenience wrapper — returns True if score >= 2."""
+        return self._match_score(sf, df) >= 2
 
     # ── Severity boost ────────────────────────────────────────────────────────
 
