@@ -152,7 +152,7 @@ rules:
       vuln_type: cmdi
 
   # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
-  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
+  # Matches: $var = $cond ? $_POST["x"] : $default;
   - id: php-cmdi-taint-ternary
     patterns:
       - pattern-either:
@@ -183,6 +183,113 @@ rules:
     message: >
       User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
       shell_exec(). Use escapeshellarg() or avoid shell calls entirely.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: MEDIUM
+      vuln_type: cmdi
+
+  # ── PHP: Mutillidae-style ternary taint sources ─────────────────────────────
+  # Mutillidae uses three ternary shapes that the simple ternary rule above
+  # does NOT match:
+  #   Shape A: $V = isset($_POST[$K]) ? $_POST[$K] : "";
+  #   Shape B: $C ? $V = $_POST[$K] : $V = $_REQUEST[$K];
+  #   Shape C: $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+  # All three appear on Mutillidae's CMDi-vulnerable pages
+  # (dns-lookup, echo, test-connectivity, content-security-policy).
+  - id: php-cmdi-taint-mutillidae-style
+    patterns:
+      - pattern-either:
+          # Shape A: isset() ternary — $V = isset($_X[$K]) ? $_X[$K] : $D;
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              exec($CMD . $V);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              exec($CMD . $V);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              exec($CMD . $V);
+          # Shape B: ternary-wraps-assignment
+          # $COND ? $V = $_POST[$K] : $V = $_REQUEST[$K];
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              exec($CMD . $V);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              exec($CMD . $V);
+          # Shape C: null-coalescing chain
+          # $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+          - pattern: |
+              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
+              ...
+              shell_exec($CMD . $V);
+          - pattern: |
+              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+              ...
+              system($CMD . $V);
+          - pattern: |
+              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
+              ...
+              system($CMD . $V);
+    message: >
+      User input from $_GET/$_POST/$_REQUEST via Mutillidae-style ternary
+      patterns (isset(), ternary-wraps-assignment, or null-coalescing) flows
+      into a shell function. Use escapeshellarg() or avoid shell calls.
     languages: [php]
     severity: ERROR
     metadata:

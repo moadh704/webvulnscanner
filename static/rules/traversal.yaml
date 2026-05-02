@@ -151,7 +151,6 @@ rules:
       vuln_type: traversal
 
   # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
-  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
   - id: php-traversal-taint-ternary
     patterns:
       - pattern-either:
@@ -198,6 +197,72 @@ rules:
     message: >
       User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
       include(). An attacker can include arbitrary files. Validate against a whitelist.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: MEDIUM
+      vuln_type: traversal
+
+  # ── PHP: Mutillidae-style ternary taint — include sink ─────────────────────
+  - id: php-traversal-taint-mutillidae-style
+    patterns:
+      - pattern-either:
+          # Shape A: isset() ternary
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              include($V);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              include($V);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              include($V);
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              include($PATH . $V);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              include($PATH . $V);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              include($PATH . $V);
+          # Shape B: ternary-wraps-assignment
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              include($V);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              include($V);
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              include($PATH . $V);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              include($PATH . $V);
+          # Shape C: null-coalescing
+          - pattern: |
+              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+              ...
+              include($V);
+          - pattern: |
+              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
+              ...
+              include($V);
+    message: >
+      User input via Mutillidae-style ternary (isset, ternary-wraps-assignment,
+      or null-coalescing) flows into include(). An attacker can include
+      arbitrary files. Validate against a whitelist.
     languages: [php]
     severity: ERROR
     metadata:

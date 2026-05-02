@@ -99,7 +99,6 @@ rules:
       vuln_type: sqli
 
   # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
-  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
   - id: php-sqli-taint-ternary
     patterns:
       - pattern-either:
@@ -130,6 +129,56 @@ rules:
     message: >
       User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
       mysqli_query(). Use prepared statements with bound parameters.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: MEDIUM
+      vuln_type: sqli
+
+  # ── PHP: Mutillidae-style ternary taint — mysqli_query sink ─────────────────
+  - id: php-sqli-taint-mutillidae-style
+    patterns:
+      - pattern-either:
+          # Shape A: isset() ternary
+          - pattern: |
+              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
+              ...
+              mysqli_query($CONN, $QUERY);
+          # Shape B: ternary-wraps-assignment
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
+              ...
+              mysqli_query($CONN, $QUERY);
+          # Shape C: null-coalescing
+          - pattern: |
+              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
+              ...
+              mysqli_query($CONN, $QUERY);
+          - pattern: |
+              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
+              ...
+              mysqli_query($CONN, $QUERY);
+    message: >
+      User input via Mutillidae-style ternary (isset, ternary-wraps-assignment,
+      or null-coalescing) flows into mysqli_query(). Use prepared statements
+      with bound parameters.
     languages: [php]
     severity: ERROR
     metadata:
