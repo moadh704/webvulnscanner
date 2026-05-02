@@ -151,6 +151,45 @@ rules:
       confidence: HIGH
       vuln_type: cmdi
 
+  # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
+  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
+  - id: php-cmdi-taint-ternary
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $VAR = $COND ? $_GET[$KEY] : $X;
+              ...
+              shell_exec($CMD . $VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_GET[$KEY];
+              ...
+              shell_exec($CMD . $VAR);
+          - pattern: |
+              $VAR = $COND ? $_POST[$KEY] : $X;
+              ...
+              shell_exec($CMD . $VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_POST[$KEY];
+              ...
+              shell_exec($CMD . $VAR);
+          - pattern: |
+              $VAR = $COND ? $_REQUEST[$KEY] : $X;
+              ...
+              shell_exec($CMD . $VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_REQUEST[$KEY];
+              ...
+              shell_exec($CMD . $VAR);
+    message: >
+      User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
+      shell_exec(). Use escapeshellarg() or avoid shell calls entirely.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A03:2025 - Injection"
+      confidence: MEDIUM
+      vuln_type: cmdi
+
   # ── Python: os.system / subprocess with user input ──────────────────────────
   - id: python-cmdi-os-system
     patterns:

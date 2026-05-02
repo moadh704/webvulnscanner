@@ -150,6 +150,61 @@ rules:
       confidence: HIGH
       vuln_type: traversal
 
+  # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
+  # Matches Mutillidae-style: $var = $cond ? $_POST["x"] : $default;
+  - id: php-traversal-taint-ternary
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $VAR = $COND ? $_GET[$KEY] : $X;
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_GET[$KEY];
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $_POST[$KEY] : $X;
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_POST[$KEY];
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $_REQUEST[$KEY] : $X;
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_REQUEST[$KEY];
+              ...
+              include($VAR);
+          - pattern: |
+              $VAR = $COND ? $_GET[$KEY] : $X;
+              ...
+              include($PATH . $VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_GET[$KEY];
+              ...
+              include($PATH . $VAR);
+          - pattern: |
+              $VAR = $COND ? $_REQUEST[$KEY] : $X;
+              ...
+              include($PATH . $VAR);
+          - pattern: |
+              $VAR = $COND ? $X : $_REQUEST[$KEY];
+              ...
+              include($PATH . $VAR);
+    message: >
+      User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
+      include(). An attacker can include arbitrary files. Validate against a whitelist.
+    languages: [php]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: MEDIUM
+      vuln_type: traversal
+
   # ── Python: open() with user input ──────────────────────────────────────────
   - id: python-traversal-open
     patterns:
