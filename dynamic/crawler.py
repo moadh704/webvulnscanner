@@ -211,6 +211,9 @@ class Crawler:
       password-change forms to the endpoint list)
     - Optional DVWA security-level setter (call set_dvwa_security_level
       after construction to choose Low / Medium / High / Impossible)
+    - Select-based navigation expansion: forms that drive navigation
+      through a <select> menu (e.g. bWAPP's portal) are enumerated as
+      one endpoint per option value.
     """
 
     # Pages that should never be visited — destructive or session-breaking
@@ -534,11 +537,36 @@ class Crawler:
         action_url = urljoin(page_url, action) if action else page_url
         if not self._in_scope(action_url):
             return
+
+        # Build base params from input/textarea fields. <select> handled
+        # separately so we can enumerate one endpoint per option value.
         params = {}
-        for tag in form.find_all(['input', 'textarea', 'select']):
+        select_options = {}  # select_name -> list of distinct option values
+        for tag in form.find_all(['input', 'textarea']):
             name = tag.get('name')
             if name:
                 params[name] = tag.get('value', 'test')
+
+        # Capture each <select>'s option values. Many legacy applications
+        # (e.g. bWAPP's portal.php) drive navigation through a <select>
+        # menu rather than <a> links — in that case the form action is
+        # the same URL repeated, but each option value triggers a
+        # different code path on the server. To exercise those code paths
+        # we need to enumerate the form once per option value.
+        for sel in form.find_all('select'):
+            name = sel.get('name')
+            if not name:
+                continue
+            opts = []
+            for opt in sel.find_all('option'):
+                v = opt.get('value', '').strip()
+                if v and v not in opts:
+                    opts.append(v)
+            if opts:
+                select_options[name] = opts
+                # Default the param to the first option so non-enumerated
+                # endpoints still have a usable value.
+                params.setdefault(name, opts[0])
 
         # ── Destructive-form filter ───────────────────────────────────────
         # Drop forms that would wipe the DB, reset the password, change the
@@ -548,8 +576,29 @@ class Crawler:
             print(f"  [Crawler] Skipped destructive form: {action_url}")
             return
 
-        if params:
+        if not params:
+            return
+
+        # If the form has no <select>, behave exactly as before.
+        if not select_options:
             self._add_endpoint(action_url, method, params)
+            return
+
+        # If the form has <select>(s), enumerate one endpoint per option
+        # value of the FIRST select. Multi-select Cartesian explosion is
+        # not worthwhile here; the first dropdown is almost always the
+        # one that drives navigation. The list size is bounded by the
+        # option count itself, so at worst we add ~150 endpoints for an
+        # app like bWAPP.
+        sel_name, opts = next(iter(select_options.items()))
+        for opt_value in opts:
+            variant = dict(params)
+            variant[sel_name] = opt_value
+            # Re-check destructive filter per-variant in case a specific
+            # option value matches a destructive parameter pattern.
+            if self._is_destructive_form(action_url, variant):
+                continue
+            self._add_endpoint(action_url, method, variant)
 
     def _add_endpoint(self, url: str, method: str, params: dict):
         clean_url = url.split('#')[0]
@@ -559,9 +608,25 @@ class Crawler:
         # bypassed the form-level filter (e.g., GET-with-query-string).
         if self._is_destructive_form(clean_url, params):
             return
-        key = (clean_url, method, frozenset(params.keys()))
-        if key not in {(e['url'], e['method'], frozenset(e['params'].keys()))
-                       for e in self.endpoints}:
+        # Dedup key uses parameter VALUES, not just names. This is required
+        # so that select-option enumeration (one variant per option value)
+        # produces distinct endpoints rather than collapsing into one.
+        # For ordinary forms, default values are stable across calls so
+        # this preserves the previous dedup behaviour.
+        try:
+            key = (clean_url, method, frozenset(params.items()))
+            existing = {(e['url'], e['method'], frozenset(e['params'].items()))
+                        for e in self.endpoints}
+        except TypeError:
+            # Defensive fallback if any param value is unhashable (e.g. list).
+            key = (clean_url, method,
+                   frozenset((k, str(v)) for k, v in params.items()))
+            existing = {
+                (e['url'], e['method'],
+                 frozenset((k, str(v)) for k, v in e['params'].items()))
+                for e in self.endpoints
+            }
+        if key not in existing:
             self.endpoints.append({
                 'url'    : clean_url,
                 'method' : method,
