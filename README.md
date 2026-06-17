@@ -83,7 +83,7 @@ This tool was developed as part of a Master's thesis:
 
 > **Automatic Detection of Web Application Vulnerabilities Using a Hybrid Static-Dynamic Approach**
 
-**Author**: Moadh  
+**Author**: Moadh and mamon  
 **Year**: 2026
 
 ## 📄 License
