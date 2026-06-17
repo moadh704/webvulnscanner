@@ -15,7 +15,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -33,7 +33,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -51,7 +51,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -68,7 +68,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -87,7 +87,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -102,7 +102,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -117,7 +117,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -132,7 +132,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -147,7 +147,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -186,7 +186,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: MEDIUM
       vuln_type: cmdi
 
@@ -239,7 +239,7 @@ rules:
               ...
               exec($CMD . $V);
           # Shape B: ternary-wraps-assignment
-          # $COND ? $V = $_POST[$K] : $V = $_REQUEST[$K];
+          # $COND ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
           - pattern: |
               $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
               ...
@@ -261,7 +261,7 @@ rules:
               ...
               system($CMD . $V);
           - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
               ...
               exec($CMD . $V);
           - pattern: |
@@ -293,7 +293,7 @@ rules:
     languages: [php]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: MEDIUM
       vuln_type: cmdi
 
@@ -309,7 +309,7 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
 
@@ -324,6 +324,6 @@ rules:
     languages: [python]
     severity: ERROR
     metadata:
-      owasp: "A03:2025 - Injection"
+      owasp: "A05:2025 - Injection"
       confidence: HIGH
       vuln_type: cmdi
