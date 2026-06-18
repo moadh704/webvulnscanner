@@ -1,4 +1,4 @@
-# ── dynamic/sqli_injector.py ─────────────────────────────────────────────────
+# ── dynamic/sqli_injector.py ─────────────────────────────────────────────────────────────────────────
 
 import time
 import requests
@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 import config
 
-# ── Error strings that indicate a SQL error in the response ──────────────────
+# ── Error strings that indicate a SQL error in the response ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 SQLI_ERRORS = [
     "you have an error in your sql syntax",
     "warning: mysql",
@@ -28,7 +28,7 @@ SQLI_ERRORS = [
     "error in your sql",
 ]
 
-# ── Payloads ──────────────────────────────────────────────────────────────────
+# ── Payloads ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 ERROR_PAYLOADS = [
     "'",
     "\"",
@@ -71,7 +71,7 @@ class SQLiInjector:
         self.scan_manager = scan_manager
         self.auth         = auth
 
-    # ── Public entry point ────────────────────────────────────────────────────
+    # ── Public entry point ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def run(self, endpoints: list) -> list:
         if not self.scan_manager.is_active('sqli'):
@@ -102,7 +102,7 @@ class SQLiInjector:
         print(f"  [SQLi] Done. Found {len(findings)} SQLi finding(s).")
         return findings
 
-    # ── Re-authentication ─────────────────────────────────────────────────────
+    # ── Re-authentication ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _reauth(self):
         """Re-login if session has expired."""
@@ -134,7 +134,7 @@ class SQLiInjector:
             print(f"  [SQLi] Re-auth failed: {e}")
         return False
 
-    # ── Core testing logic ────────────────────────────────────────────────────
+    # ── Core testing logic ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _test_parameter(self, ep: dict, param: str) -> dict:
         finding = self._test_error_based(ep, param)
@@ -217,7 +217,7 @@ class SQLiInjector:
                 )
         return None
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _is_login_page(self, response) -> bool:
         """Return True if the response is the login page."""
@@ -272,7 +272,7 @@ class SQLiInjector:
                       method, evidence) -> dict:
         return {
             'type'             : 'sqli',
-            'owasp'            : 'A03:2025 - Injection',
+            'owasp'            : 'A05:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,
