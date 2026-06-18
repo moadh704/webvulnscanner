@@ -1,4 +1,4 @@
-# ── dynamic/cmdi_injector.py ─────────────────────────────────────────────────
+# ── dynamic/cmdi_injector.py ─────────────────────────────────────────────────────────────────────────
 
 import time
 import requests
@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 import config
 
-# ── Output patterns that confirm command execution ────────────────────────────
+# ── Output patterns that confirm command execution ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 CMD_PATTERNS = [
     "root:",            # /etc/passwd
     "volume serial",    # Windows dir output
@@ -20,7 +20,7 @@ CMD_PATTERNS = [
     "permission denied",# shell error
 ]
 
-# ── Payload sets ──────────────────────────────────────────────────────────────
+# ── Payload sets ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 # Each payload tries to run a command and produce visible output
 OUTPUT_PAYLOADS = [
     "; whoami",
@@ -73,7 +73,7 @@ class CMDiInjector:
         self.scan_manager = scan_manager
         self.auth         = auth
 
-    # ── Public entry point ────────────────────────────────────────────────────
+    # ── Public entry point ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def run(self, endpoints: list) -> list:
         if not self.scan_manager.is_active('cmdi'):
@@ -104,7 +104,7 @@ class CMDiInjector:
         print(f"  [CMDi] Done. Found {len(findings)} CMDi finding(s).")
         return findings
 
-    # ── Re-authentication ─────────────────────────────────────────────────────
+    # ── Re-authentication ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _reauth(self):
         if not self.auth:
@@ -135,7 +135,7 @@ class CMDiInjector:
             pass
         return False
 
-    # ── Core detection ────────────────────────────────────────────────────────
+    # ── Core detection ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _test_parameter(self, ep: dict, param: str) -> dict:
         # 1. Output-based
@@ -204,7 +204,7 @@ class CMDiInjector:
                 )
         return None
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _is_login_page(self, response) -> bool:
         if response is None:
@@ -256,7 +256,7 @@ class CMDiInjector:
                       method, evidence) -> dict:
         return {
             'type'             : 'cmdi',
-            'owasp'            : 'A03:2025 - Injection',
+            'owasp'            : 'A05:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,
