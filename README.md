@@ -34,23 +34,68 @@ pip install -r requirements.txt
 
 ## ▶️ Usage
 
-### Command Line
+### Command-Line Interface
+
+WebVulnScanner is installed as a console command. The recommended way to run it is:
+
 ```bash
-# Hybrid scan (recommended)
-python main.py --url http://target.com --src ./source-code/
-# Dynamic-only scan
-python main.py --url http://target.com
-# Run specific modules only
-python main.py --url http://target.com --scan sqli,xss
-# Disable AI
-python main.py --url http://target.com --no-ai
+WebVulnScanner [options]
 ```
 
-### Streamlit Web Interface
+#### Basic Usage Examples
+
+```bash
+# Full hybrid scan (static + dynamic) - recommended for most cases
+WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
+
+# Dynamic-only (black-box) scan
+WebVulnScanner --url http://localhost/dvwa --mode dynamic
+
+# Static-only analysis
+WebVulnScanner --url http://localhost/dvwa --mode static --src ./source-code/
+
+# Run only specific vulnerability modules
+WebVulnScanner --url http://localhost/dvwa --scan sqli,xss,cmdi
+
+# Disable AI enhancement layer
+WebVulnScanner --url http://localhost/dvwa --no-ai
+
+# Use a specific AI provider for analysis
+WebVulnScanner --url http://localhost/dvwa --ai-provider groq
+
+# Authenticated scan with credentials
+WebVulnScanner --url http://localhost/dvwa --username admin --password password
+```
+
+#### Common Command-Line Options
+
+| Option              | Description                                                                 | Default     |
+|---------------------|-----------------------------------------------------------------------------|-------------|
+| `--url`             | Target web application URL (required)                                       | —           |
+| `--src`             | Path to the source code directory (enables hybrid/static analysis)          | —           |
+| `--scan`            | Comma-separated list of modules to enable (e.g. `sqli,xss,cmdi`)            | all         |
+| `--mode`            | Scan mode: `full` (hybrid), `static`, or `dynamic`                          | `full`      |
+| `--no-ai`           | Disable the AI Enhancement Layer                                            | enabled     |
+| `--ai-provider`     | AI provider to use for analysis (`groq`, `gemini`, or `none`)               | —           |
+| `--username`        | Username for authenticated scanning                                         | —           |
+| `--password`        | Password for authenticated scanning                                         | —           |
+| `--difficulty`      | Set application difficulty level (e.g. for DVWA)                            | —           |
+
+> **Tip:** Run `WebVulnScanner --help` to see the complete list of available options.
+
+### Web Interface
+
+WebVulnScanner includes a modern Streamlit-based web interface for easier configuration and result visualization.
+
+**Recommended for Windows users:**
+- Simply double-click the `ui.bat` file in the project root directory.
+
+**Alternative (cross-platform):**
 ```bash
 streamlit run app.py
 ```
-Or double-click `ui.bat` on Windows.
+
+The web interface allows you to configure scans, monitor progress, and view detailed HTML reports directly in your browser.
 
 ## 📁 Project Structure
 
