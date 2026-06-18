@@ -1,4 +1,4 @@
-# ── dynamic/crawler.py ───────────────────────────────────────────────────────
+# ── dynamic/crawler.py ───────────────────────────────────────────────────────────────────────────
 
 import json
 import requests
@@ -7,7 +7,11 @@ from urllib.parse import urljoin, urlparse, parse_qs
 
 import config
 
-# ── Common REST API paths to probe ────────────────────────────────────────────
+import warnings
+from bs4 import XMLParsedAsHTMLWarning
+warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+# ── Common REST API paths to probe ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 API_WORDLIST = [
     # Generic REST patterns
     '/api/users', '/api/user', '/api/products', '/api/product',
@@ -23,7 +27,7 @@ API_WORDLIST = [
 ]
 
 
-# ── Destructive parameters / pages ────────────────────────────────────────────
+# ── Destructive parameters / pages ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 # These markers identify forms or endpoints that, if exercised by the
 # injectors, would damage the target application's state (wipe DB, change
 # password, log out, change difficulty, etc.). The crawler must never add
@@ -55,7 +59,7 @@ DESTRUCTIVE_PATH_FRAGMENTS = [
 ]
 
 
-# ── Login form auto-detection ─────────────────────────────────────────────────
+# ── Login form auto-detection ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 def _parse_login_form(html: str) -> dict:
     """
@@ -246,7 +250,8 @@ class Crawler:
 
         self._visit(self.base_url)
 
-        # ── REST API discovery ─────────────────────────────────────────────
+        # ── REST API discovery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
         self._discover_from_robots()
         self._discover_api_endpoints()
 
@@ -282,7 +287,7 @@ class Crawler:
         except Exception as e:
             print(f"  [Crawler] Authentication failed: {e}")
 
-    # ── DVWA security level setter ────────────────────────────────────────────
+    # ── DVWA security level setter ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def set_dvwa_security_level(self, level: str) -> bool:
         """
@@ -331,7 +336,7 @@ class Crawler:
             print(f"  [Crawler] Setting DVWA level failed: {e}")
             return False
 
-    # ── Visit logic ───────────────────────────────────────────────────────────
+    # ── Visit logic ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _visit(self, url: str):
         if not self._in_scope(url):
@@ -383,7 +388,7 @@ class Crawler:
             full_url = urljoin(effective_url, tag['href'].strip())
             self._visit(full_url)
 
-    # ── REST API Discovery ────────────────────────────────────────────────────
+    # ── REST API Discovery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _discover_from_robots(self):
         """Parse robots.txt and sitemap.xml for hidden paths."""
@@ -489,7 +494,7 @@ class Crawler:
 
         self._add_endpoint(clean_url, 'GET', params)
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _is_destructive_url(self, url: str) -> bool:
         """Check if a URL points to a destructive page (DB reset etc).
@@ -568,10 +573,8 @@ class Crawler:
                 # endpoints still have a usable value.
                 params.setdefault(name, opts[0])
 
-        # ── Destructive-form filter ───────────────────────────────────────
-        # Drop forms that would wipe the DB, reset the password, change the
-        # security level, or log the session out. This protects the target
-        # application from being damaged by the injectors that follow.
+        # ── Destructive-form filter ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
         if self._is_destructive_form(action_url, params):
             print(f"  [Crawler] Skipped destructive form: {action_url}")
             return
