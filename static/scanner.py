@@ -1,4 +1,4 @@
-# ── static/scanner.py ────────────────────────────────────────────────────────
+# ── static/scanner.py ─────────────────────────────────────────────────
 
 import os
 import json
@@ -37,7 +37,7 @@ class StaticScanner:
             os.path.dirname(__file__), 'rules'
         )
 
-    # ── Public entry point ────────────────────────────────────────────────────
+    # ── Public entry point ─────────────────────────────────────────────────────────────
 
     def run(self, source_dir: str) -> list:
         """
@@ -70,7 +70,7 @@ class StaticScanner:
               f"candidate finding(s).")
         return findings
 
-    # ── Semgrep execution ─────────────────────────────────────────────────────
+    # ── Semgrep execution ─────────────────────────────────────────────────────────────
 
     def _get_active_rule_files(self) -> list:
         """Return rule file paths for currently active modules."""
@@ -131,7 +131,7 @@ class StaticScanner:
             print(f"  [Static] Semgrep execution failed: {e}")
             return []
 
-    # ── Normalization ─────────────────────────────────────────────────────────
+    # ── Normalization ─────────────────────────────────────────────────────────────────
 
     def _normalize(self, raw_results: list) -> list:
         """
@@ -152,7 +152,7 @@ class StaticScanner:
                 message    = r.get('extra', {}).get('message', '').strip()
                 metadata   = r.get('extra', {}).get('metadata', {})
                 owasp      = metadata.get('owasp',
-                                          'A03:2025 - Injection')
+                                          'A05:2025 - Injection')
 
                 # Skip if module not active
                 if not self.scan_manager.is_active(vuln_type):

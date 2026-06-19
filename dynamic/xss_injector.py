@@ -1,4 +1,4 @@
-# ── dynamic/xss_injector.py ──────────────────────────────────────────────────
+# ── dynamic/xss_injector.py ─────────────────────────────────────────────────────────────────────────
 
 import html
 import requests
@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 
 import config
 
-# ── XSS Payloads ──────────────────────────────────────────────────────────────
+# ── XSS Payloads ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 XSS_PAYLOADS = [
     "<script>alert('XSS')</script>",
     "<img src=x onerror=alert(1)>",
@@ -33,7 +33,7 @@ class XSSInjector:
     A reflection is considered exploitable only when the special
     characters of the payload (<, >, ", ') survive the round-trip to the
     server intact. If the application HTML-encodes the payload before
-    reflecting it (e.g. '&lt;script&gt;alert(1)&lt;/script&gt;'), the
+    reflecting it (e.g. '<script>alert(1)</script>'), the
     finding is rejected — the payload may appear as text but cannot
     execute as script.
     """
@@ -44,7 +44,7 @@ class XSSInjector:
         self.scan_manager = scan_manager
         self.auth         = auth
 
-    # ── Public entry point ────────────────────────────────────────────────────
+    # ── Public entry point ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def run(self, endpoints: list) -> list:
         if not self.scan_manager.is_active('xss'):
@@ -75,7 +75,7 @@ class XSSInjector:
         print(f"  [XSS] Done. Found {len(findings)} XSS finding(s).")
         return findings
 
-    # ── Re-authentication ─────────────────────────────────────────────────────
+    # ── Re-authentication ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _reauth(self):
         if not self.auth:
@@ -106,7 +106,7 @@ class XSSInjector:
             pass
         return False
 
-    # ── Core detection ────────────────────────────────────────────────────────
+    # ── Core detection ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _test_parameter(self, ep: dict, param: str) -> dict:
         """Inject XSS payloads and check for unencoded reflection."""
@@ -146,7 +146,7 @@ class XSSInjector:
 
         1. The raw payload must appear in the body — every byte intact.
            If the body only contains an HTML-encoded variant of the
-           payload (e.g. '&lt;script&gt;') it is NOT exploitable, so we
+           payload (e.g. '<script>') it is NOT exploitable, so we
            never reach step 2 for that case.
 
         2. The structurally-significant characters of the payload must
@@ -157,7 +157,7 @@ class XSSInjector:
         Examples:
           payload  = '<script>alert(1)</script>'
           body 1   = '... <script>alert(1)</script> ...'    -> True  (vulnerable)
-          body 2   = '... &lt;script&gt;alert(1)&lt;/script&gt; ...'
+          body 2   = '... <script>alert(1)</script> ...'
                                                             -> False (escaped)
           body 3   = '... script alert 1 script ...'        -> False (stripped)
         """
@@ -193,7 +193,7 @@ class XSSInjector:
 
         return True
 
-    # ── Helpers ───────────────────────────────────────────────────────────────
+    # ── Helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     def _is_login_page(self, response) -> bool:
         if response is None:
@@ -245,7 +245,7 @@ class XSSInjector:
                       payload, evidence) -> dict:
         return {
             'type'             : 'xss',
-            'owasp'            : 'A03:2025 - Injection',
+            'owasp'            : 'A05:2025 - Injection',
             'url'              : ep['url'].split('#')[0],
             'method'           : ep['method'],
             'parameter'        : param,

@@ -32,6 +32,69 @@ cd webvulnscanner
 pip install -r requirements.txt
 ```
 
+## 🚀 Quick Start
+
+### 1. Basic Hybrid Scan (Recommended)
+```bash
+WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
+```
+
+### 2. Dynamic-only Scan (No source code needed)
+```bash
+WebVulnScanner --url http://localhost/mutillidae --mode dynamic
+```
+
+Reports are saved in the `reports/` folder as HTML files.
+
+## ⚙️ Configuration
+
+WebVulnScanner supports a `config.py` file for advanced settings.
+
+1. Copy the example configuration:
+   ```bash
+   cp config.example.py config.py
+   ```
+
+2. Edit `config.py` to customize:
+   - Request timeout and delays
+   - Maximum pages to crawl
+   - AI provider and API keys
+   - Report output directory
+
+> Most settings can also be overridden using command-line flags.
+
+## 🤖 AI Enhancement Setup (Optional)
+
+The AI layer can significantly reduce false positives and provide remediation suggestions.
+
+### Supported AI Providers
+
+| Provider   | Type     | Free Tier | Recommendation |
+|------------|----------|-----------|----------------|
+| **Groq**   | Cloud    | Yes       | ★★★★★ (Recommended) |
+| **Gemini** | Cloud    | Yes       | ★★★★       |
+| **Ollama** | Local    | Yes       | ★★★         |
+
+### How to Enable
+
+1. Get an API key:
+   - **Groq**: [console.groq.com](https://console.groq.com)
+   - **Gemini**: [aistudio.google.com](https://aistudio.google.com)
+
+2. Add the key in `config.py` or use the flag:
+   ```bash
+   WebVulnScanner --ai-provider groq
+   ```
+
+## 📊 Reports & Output
+
+After scanning, WebVulnScanner generates:
+
+- **HTML Report** with charts and detailed findings (saved in `reports/`)
+- **JSON export** for further processing
+
+You can open the HTML report directly in your browser.
+
 ## ▶️ Usage
 
 ### Command-Line Interface
