@@ -1,17 +1,23 @@
 rules:
 
-  # ── PHP: system/exec with user input (single-line) ──────────────────────────
-  - id: php-cmdi-system
+  # ── PHP: system/exec with direct user input ─────────────────────────────────
+  - id: php-cmdi-system-get
     patterns:
-      - pattern: system($_GET[$KEY]);
-      - pattern: system($_POST[$KEY]);
-      - pattern: system($_REQUEST[$KEY]);
-      - pattern: system($CMD . $_GET[$KEY]);
-      - pattern: system($CMD . $_POST[$KEY]);
-      - pattern: system($CMD . $_REQUEST[$KEY]);
+      - pattern: system($_GET[$KEY])
+      - pattern: system($_POST[$KEY])
+      - pattern: system($_REQUEST[$KEY])
+      - pattern: exec($_GET[$KEY])
+      - pattern: exec($_POST[$KEY])
+      - pattern: exec($_REQUEST[$KEY])
+      - pattern: passthru($_GET[$KEY])
+      - pattern: passthru($_POST[$KEY])
+      - pattern: passthru($_REQUEST[$KEY])
+      - pattern: shell_exec($_GET[$KEY])
+      - pattern: shell_exec($_POST[$KEY])
+      - pattern: shell_exec($_REQUEST[$KEY])
     message: >
-      User input passed directly to system(). An attacker can inject
-      arbitrary OS commands. Use escapeshellarg() or avoid shell calls.
+      User input passed directly to system/exec/shell_exec/passthru().
+      This can lead to command injection. Use escapeshellarg() and escapeshellcmd().
     languages: [php]
     severity: ERROR
     metadata:
@@ -19,71 +25,15 @@ rules:
       confidence: HIGH
       vuln_type: cmdi
 
-  - id: php-cmdi-exec
-    patterns:
-      - pattern: exec($_GET[$KEY]);
-      - pattern: exec($_POST[$KEY]);
-      - pattern: exec($_REQUEST[$KEY]);
-      - pattern: exec($CMD . $_GET[$KEY], $OUT);
-      - pattern: exec($CMD . $_POST[$KEY], $OUT);
-      - pattern: exec($CMD . $_REQUEST[$KEY], $OUT);
-    message: >
-      User input passed to exec(). Use escapeshellarg() to sanitize
-      input or avoid executing OS commands from user data.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  - id: php-cmdi-shell-exec
-    patterns:
-      - pattern: shell_exec($_GET[$KEY]);
-      - pattern: shell_exec($_POST[$KEY]);
-      - pattern: shell_exec($_REQUEST[$KEY]);
-      - pattern: shell_exec($CMD . $_GET[$KEY]);
-      - pattern: shell_exec($CMD . $_POST[$KEY]);
-      - pattern: shell_exec($CMD . $_REQUEST[$KEY]);
-    message: >
-      User input passed to shell_exec(). Sanitize with escapeshellarg()
-      or use a safer alternative.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  - id: php-cmdi-passthru
-    patterns:
-      - pattern: passthru($_GET[$KEY]);
-      - pattern: passthru($_POST[$KEY]);
-      - pattern: passthru($_REQUEST[$KEY]);
-      - pattern: passthru($CMD . $_GET[$KEY]);
-      - pattern: passthru($CMD . $_POST[$KEY]);
-      - pattern: passthru($CMD . $_REQUEST[$KEY]);
-    message: >
-      User input passed to passthru(). This allows OS command injection.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  # ── PHP: two-step taint — variable from GET/POST/REQUEST then shell call ────
-  # Matches DVWA-style code:
-  #   $target = $_REQUEST['ip'];
-  #   $cmd = shell_exec('ping ' . $target);
-  - id: php-cmdi-taint-shell-exec-get
+  # ── PHP: two-step taint into system/exec ────────────────────────────────────
+  - id: php-cmdi-taint-get
     pattern: |
       $VAR = $_GET[$KEY];
       ...
-      shell_exec($CMD . $VAR);
+      system($VAR);
     message: >
-      User input from $_GET assigned to variable then concatenated into
-      shell_exec(). This allows OS command injection. Use escapeshellarg().
+      User input from $_GET assigned to variable then passed to system().
+      Use proper escaping or avoid shell commands.
     languages: [php]
     severity: ERROR
     metadata:
@@ -91,14 +41,14 @@ rules:
       confidence: HIGH
       vuln_type: cmdi
 
-  - id: php-cmdi-taint-shell-exec-post
+  - id: php-cmdi-taint-post
     pattern: |
       $VAR = $_POST[$KEY];
       ...
-      shell_exec($CMD . $VAR);
+      exec($VAR);
     message: >
-      User input from $_POST assigned to variable then concatenated into
-      shell_exec(). This allows OS command injection. Use escapeshellarg().
+      User input from $_POST assigned to variable then passed to exec().
+      Sanitize or avoid shell execution.
     languages: [php]
     severity: ERROR
     metadata:
@@ -106,206 +56,31 @@ rules:
       confidence: HIGH
       vuln_type: cmdi
 
-  - id: php-cmdi-taint-shell-exec-request
-    pattern: |
-      $VAR = $_REQUEST[$KEY];
-      ...
-      shell_exec($CMD . $VAR);
-    message: >
-      User input from $_REQUEST assigned to variable then concatenated into
-      shell_exec(). This allows OS command injection. Use escapeshellarg().
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  - id: php-cmdi-taint-system-request
-    pattern: |
-      $VAR = $_REQUEST[$KEY];
-      ...
-      system($CMD . $VAR);
-    message: >
-      User input from $_REQUEST assigned to variable then used in system().
-      Sanitize with escapeshellarg() or avoid shell calls.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  - id: php-cmdi-taint-exec-request
-    pattern: |
-      $VAR = $_REQUEST[$KEY];
-      ...
-      exec($CMD . $VAR);
-    message: >
-      User input from $_REQUEST assigned to variable then used in exec().
-      Sanitize with escapeshellarg() or avoid shell calls.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: HIGH
-      vuln_type: cmdi
-
-  # ── PHP: ternary taint — variable from ternary involving GET/POST/REQUEST ───
-  # Matches: $var = $cond ? $_POST["x"] : $default;
-  - id: php-cmdi-taint-ternary
+  # ── PHP: string concatenation in shell command ─────────────────────────────
+  - id: php-cmdi-concat
     patterns:
-      - pattern-either:
-          - pattern: |
-              $VAR = $COND ? $_GET[$KEY] : $X;
-              ...
-              shell_exec($CMD . $VAR);
-          - pattern: |
-              $VAR = $COND ? $X : $_GET[$KEY];
-              ...
-              shell_exec($CMD . $VAR);
-          - pattern: |
-              $VAR = $COND ? $_POST[$KEY] : $X;
-              ...
-              shell_exec($CMD . $VAR);
-          - pattern: |
-              $VAR = $COND ? $X : $_POST[$KEY];
-              ...
-              shell_exec($CMD . $VAR);
-          - pattern: |
-              $VAR = $COND ? $_REQUEST[$KEY] : $X;
-              ...
-              shell_exec($CMD . $VAR);
-          - pattern: |
-              $VAR = $COND ? $X : $_REQUEST[$KEY];
-              ...
-              shell_exec($CMD . $VAR);
+      - pattern: system("..." . $_GET[$KEY] . "...")
+      - pattern: exec("..." . $_POST[$KEY] . "...")
+      - pattern: shell_exec("..." . $_REQUEST[$KEY] . "...")
     message: >
-      User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
-      shell_exec(). Use escapeshellarg() or avoid shell calls entirely.
+      User input concatenated into shell command string.
+      Use escapeshellarg() on every user-controlled value.
     languages: [php]
     severity: ERROR
     metadata:
       owasp: "A05:2025 - Injection"
-      confidence: MEDIUM
+      confidence: HIGH
       vuln_type: cmdi
 
-  # ── PHP: Mutillidae-style ternary taint sources ─────────────────────────────
-  # Mutillidae uses three ternary shapes that the simple ternary rule above
-  # does NOT match:
-  #   Shape A: $V = isset($_POST[$K]) ? $_POST[$K] : "";
-  #   Shape B: $C ? $V = $_POST[$K] : $V = $_REQUEST[$K];
-  #   Shape C: $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
-  # All three appear on Mutillidae's CMDi-vulnerable pages
-  # (dns-lookup, echo, test-connectivity, content-security-policy).
-  - id: php-cmdi-taint-mutillidae-style
-    patterns:
-      - pattern-either:
-          # Shape A: isset() ternary — $V = isset($_X[$K]) ? $_X[$K] : $D;
-          - pattern: |
-              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
-              ...
-              exec($CMD . $V);
-          - pattern: |
-              $V = isset($_POST[$K]) ? $_POST[$K] : $D;
-              ...
-              exec($CMD . $V);
-          - pattern: |
-              $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
-              ...
-              exec($CMD . $V);
-          # Shape B: ternary-wraps-assignment
-          # $COND ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
-          - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
-              ...
-              exec($CMD . $V);
-          - pattern: |
-              $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
-              ...
-              exec($CMD . $V);
-          # Shape C: null-coalescing chain
-          # $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
-          - pattern: |
-              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
-              ...
-              shell_exec($CMD . $V);
-          - pattern: |
-              $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
-              ...
-              system($CMD . $V);
-          - pattern: |
-              $V = $_POST[$K] ?? $_GET[$K2] ?? $D;
-              ...
-              system($CMD . $V);
-    message: >
-      User input from $_GET/$_POST/$_REQUEST via Mutillidae-style ternary
-      patterns (isset(), ternary-wraps-assignment, or null-coalescing) flows
-      into a shell function. Use escapeshellarg() or avoid shell calls.
-    languages: [php]
-    severity: ERROR
-    metadata:
-      owasp: "A05:2025 - Injection"
-      confidence: MEDIUM
-      vuln_type: cmdi
-
-  # ── Python: os.system / subprocess with user input ──────────────────────────
+  # ── Python: os.system / subprocess with user input ─────────────────────────
   - id: python-cmdi-os-system
     patterns:
       - pattern: os.system(request.args.get($KEY))
       - pattern: os.system(request.form.get($KEY))
-      - pattern: os.system($CMD + request.$METHOD.get($KEY))
+      - pattern: os.system("..." + request.$METHOD.get($KEY))
     message: >
-      User input passed to os.system(). Use subprocess with a list
-      of arguments and shell=False instead.
+      User input passed to os.system(). This is highly dangerous.
+      Use subprocess with shell=False and proper argument list instead.
     languages: [python]
     severity: ERROR
     metadata:
@@ -313,15 +88,30 @@ rules:
       confidence: HIGH
       vuln_type: cmdi
 
-  - id: python-cmdi-subprocess
+  - id: python-cmdi-subprocess-shell-true
     patterns:
-      - pattern: subprocess.call($CMD + request.$METHOD.get($KEY), shell=True)
-      - pattern: subprocess.run($CMD + request.$METHOD.get($KEY), shell=True)
-      - pattern: subprocess.Popen($CMD + request.$METHOD.get($KEY), shell=True)
+      - pattern: subprocess.call(..., shell=True)
+      - pattern: subprocess.Popen(..., shell=True)
     message: >
-      User input concatenated into subprocess call with shell=True.
+      subprocess called with shell=True and user input. This enables command injection.
       Use shell=False and pass arguments as a list.
     languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+      vuln_type: cmdi
+
+  # ── JavaScript/Node: child_process with user input ──────────────────────────
+  - id: js-cmdi-child-process
+    patterns:
+      - pattern: exec(req.$METHOD.$KEY)
+      - pattern: execSync(req.$METHOD.$KEY)
+      - pattern: spawn(req.$METHOD.$KEY, ..., { shell: true })
+    message: >
+      User input passed to child_process exec/execSync with shell enabled.
+      Avoid shell: true or properly sanitize/validate input.
+    languages: [javascript, typescript]
     severity: ERROR
     metadata:
       owasp: "A05:2025 - Injection"
