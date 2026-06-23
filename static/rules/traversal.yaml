@@ -57,9 +57,6 @@ rules:
       vuln_type: traversal
 
   # ── PHP: two-step taint — variable from GET/POST/REQUEST then included ──────
-  # Matches DVWA-style code:
-  #   $file = $_GET['page'];
-  #   include($file);
   - id: php-traversal-taint-include-get
     pattern: |
       $VAR = $_GET[$KEY];
@@ -175,11 +172,7 @@ rules:
               ...
               include($VAR);
           - pattern: |
-              $VAR = $COND ? $X : $_REQUEST[$KEY];
-              ...
-              include($VAR);
-          - pattern: |
-              $VAR = $COND ? $_GET[$KEY] : $X;
+              $VAR = $COND ? $X : $_GET[$KEY];
               ...
               include($PATH . $VAR);
           - pattern: |
@@ -188,10 +181,6 @@ rules:
               include($PATH . $VAR);
           - pattern: |
               $VAR = $COND ? $_REQUEST[$KEY] : $X;
-              ...
-              include($PATH . $VAR);
-          - pattern: |
-              $VAR = $COND ? $X : $_REQUEST[$KEY];
               ...
               include($PATH . $VAR);
     message: >
@@ -220,10 +209,6 @@ rules:
           - pattern: |
               $V = isset($_REQUEST[$K]) ? $_REQUEST[$K] : $D;
               ...
-              include($V);
-          - pattern: |
-              $V = isset($_GET[$K]) ? $_GET[$K] : $D;
-              ...
               include($PATH . $V);
           - pattern: |
               $V = isset($_POST[$K]) ? $_POST[$K] : $D;
@@ -243,13 +228,13 @@ rules:
               ...
               include($V);
           - pattern: |
-              $C ? $V = $_POST[$K] : $V = $_REQUEST[$K2];
+              $C ? $V = $_POST[$K] : $V = $_GET[$K2];
               ...
-              include($PATH . $V);
+              include($V);
           - pattern: |
               $C ? $V = $_GET[$K] : $V = $_REQUEST[$K2];
               ...
-              include($PATH . $V);
+              include($V);
           # Shape C: null-coalescing
           - pattern: |
               $V = $_GET[$K] ?? $_POST[$K2] ?? $D;
@@ -286,6 +271,21 @@ rules:
       confidence: HIGH
       vuln_type: traversal
 
+  # ── Python: pathlib with user input ─────────────────────────────────────────
+  - id: python-traversal-pathlib
+    patterns:
+      - pattern: Path(request.args.get($KEY))
+      - pattern: open(Path(request.form.get($KEY)))
+    message: >
+      User input used when constructing Path objects.
+      Validate and sanitize paths before use.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
   # ── JavaScript/Node: fs.readFile with user input ────────────────────────────
   - id: js-traversal-readfile
     patterns:
@@ -295,6 +295,21 @@ rules:
     message: >
       User input used in fs.readFile() path. Sanitize and validate
       the path to prevent directory traversal attacks.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: "A01:2025 - Broken Access Control"
+      confidence: HIGH
+      vuln_type: traversal
+
+  # ── JavaScript: path.join with user input ────────────────────────────────────
+  - id: js-traversal-path-join
+    patterns:
+      - pattern: path.join($BASE, req.$METHOD.$KEY)
+      - pattern: fs.readFileSync(path.join(__dirname, req.query.$KEY))
+    message: >
+      User-controlled value used in path.join().
+      Validate the final resolved path.
     languages: [javascript, typescript]
     severity: ERROR
     metadata:
