@@ -122,10 +122,6 @@ rules:
               $VAR = $COND ? $_REQUEST[$KEY] : $X;
               ...
               mysqli_query($CONN, $QUERY);
-          - pattern: |
-              $VAR = $COND ? $X : $_REQUEST[$KEY];
-              ...
-              mysqli_query($CONN, $QUERY);
     message: >
       User input from $_GET/$_POST/$_REQUEST via ternary expression flows into
       mysqli_query(). Use prepared statements with bound parameters.
@@ -206,6 +202,36 @@ rules:
       confidence: HIGH
       vuln_type: sqli
 
+  # ── Python: f-string with user input in execute() ─────────────────────────────
+  - id: python-sqli-fstring-execute
+    patterns:
+      - pattern: $CURSOR.execute(f"...{request.args.get($KEY)}...")
+      - pattern: $CURSOR.execute(f"...{request.form.get($KEY)}...")
+    message: >
+      User input used inside f-string passed to execute().
+      Use parameterized queries instead.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── Python: SQLAlchemy text() with user input ────────────────────────────────
+  - id: python-sqli-sqlalchemy-text
+    patterns:
+      - pattern: text("..." + request.$METHOD.get($KEY))
+      - pattern: text(f"...{$VAR}...")
+    message: >
+      User input used in SQLAlchemy text() which bypasses parameterization.
+      Use text() with bindparams or proper ORM queries.
+    languages: [python]
+    severity: ERROR
+    metadata:
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
   # ── JavaScript/Node: string concatenation in db.query ───────────────────────
   - id: js-sqli-query-concat
     patterns:
@@ -214,6 +240,21 @@ rules:
     message: >
       User input concatenated into database query.
       Use parameterized queries with placeholders.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      owasp: "A05:2025 - Injection"
+      confidence: HIGH
+      vuln_type: sqli
+
+  # ── JavaScript: template literal in query ────────────────────────────────────
+  - id: js-sqli-template-literal
+    patterns:
+      - pattern: db.query(`...${req.$METHOD.$KEY}...`)
+      - pattern: pool.query(`SELECT ... ${$VAR} ...`)
+    message: >
+      User input used inside template literal for database query.
+      Use parameterized queries.
     languages: [javascript, typescript]
     severity: ERROR
     metadata:
