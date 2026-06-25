@@ -40,12 +40,12 @@ class IDOREnumerator:
         findings = []
         print("  [IDOR] Starting IDOR enumeration tests...")
 
-        # Check if target is Juice Shop — probe REST API directly
+        # Test common REST API patterns for potential IDOR vulnerabilities
         base_url = self._get_base_url_from_config()
-        if base_url and '3000' in base_url:
-            print("  [IDOR] Detected Juice Shop — probing REST API directly...")
-            juice_findings = self._test_juice_shop(base_url)
-            findings.extend(juice_findings)
+        if self._looks_like_modern_web_app(base_url):
+            print("  [IDOR] Testing common REST API endpoints for ID enumeration...")
+            api_findings = self._enumerate_ids_in_common_apis(base_url)
+            findings.extend(api_findings)
 
         safe_endpoints = [
             ep for ep in endpoints
@@ -69,16 +69,40 @@ class IDOREnumerator:
         except Exception:
             return None
 
-    def _test_juice_shop(self, base_url: str) -> list:
-        """Test Juice Shop REST API endpoints for IDOR."""
+    def _looks_like_modern_web_app(self, url: str) -> bool:
+        """
+        Detect modern web applications that commonly expose REST APIs 
+        (frequent source of IDOR vulnerabilities).
+        """
+        if not url:
+            return False
+
+        url_lower = url.lower()
+        modern_ports = ['3000', '8000', '8080', '5000', '4200', '3001']
+        api_indicators = ['/api/', '/rest/', 'api.', 'graphql']
+
+        if any(port in url_lower for port in modern_ports):
+            return True
+        if any(indicator in url_lower for indicator in api_indicators):
+            return True
+        return False
+
+    def _enumerate_ids_in_common_apis(self, base_url: str) -> list:
+        """Test common REST API endpoints for potential IDOR vulnerabilities."""
         findings = []
         base = base_url.rstrip('/')
 
-        # Known Juice Shop REST API endpoints with integer IDs
+        # Common REST API endpoint patterns that often have integer IDs
+        # (frequent source of IDOR vulnerabilities in modern web apps)
         api_endpoints = [
-            '/api/Users',
-            '/api/Products',
-            '/rest/user/whoami',
+            '/api/users',
+            '/api/products',
+            '/api/orders',
+            '/api/items',
+            '/rest/users',
+            '/rest/products',
+            '/api/v1/users',
+            '/api/v1/products',
         ]
 
         for endpoint in api_endpoints:
