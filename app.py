@@ -10,6 +10,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+import html
 
 # ── Page Configuration ────────────────────────────────────────────────────────
 st.set_page_config(
@@ -219,63 +220,58 @@ def build_command():
 
 # ── Findings Display ──────────────────────────────────────────────────────────
 def display_findings(findings):
-    """Render findings as cards."""
+    """Display findings using native Streamlit components (more stable)."""
     for f in findings:
-        sev = f.get("severity", "Medium").lower()
+        sev = f.get("severity", "Medium")
         ftype = f.get("finding_type", 3)
-
-        if ftype == 1:
-            type_badge = '<span class="badge badge-verified">✓ Verified</span>'
-        elif ftype == 2:
-            type_badge = '<span class="badge badge-candidate">⚠ Candidate</span>'
-        else:
-            type_badge = '<span class="badge badge-detected">◎ Detected</span>'
-
-        sev_badge = f'<span class="badge badge-{sev}">{f.get("severity", "Medium")}</span>'
-
         url = f.get("url", "Unknown")
         param = f.get("parameter", "")
         vuln_type = f.get("type", "unknown").upper()
         owasp = f.get("owasp", "")
+        evidence = f.get("evidence_dynamic", "")
+        payload = f.get("payload", "")
+        remediation = f.get("remediation", "")
 
-        title = f"<b>[{vuln_type}]</b> {url}"
-        if param:
-            title += f' — <code style="color:#79c0ff">{param}</code>'
+        # Determine type badge
+        if ftype == 1:
+            type_label = "✅ Verified"
+            type_color = "green"
+        elif ftype == 2:
+            type_label = "⚠️ Candidate"
+            type_color = "orange"
+        else:
+            type_label = "🔍 Detected"
+            type_color = "blue"
 
-        card_html = f"""
-        <div class="finding-card {sev}">
-            <div style="margin-bottom: 10px;">
-                {sev_badge}{type_badge}
-                <span style="color: #8b949e; font-size: 11px;">{owasp}</span>
-            </div>
-            <div style="color: #e6edf3; font-size: 14px; margin-bottom: 8px;">{title}</div>
-        """
+        # Create a container for each finding
+        with st.container():
+            # Header with severity and type
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                st.markdown(f"**[{vuln_type}]** {url}")
+                if param:
+                    st.markdown(f"**Parameter:** `{param}`")
+            with col2:
+                st.markdown(f":{type_color}[**{sev}**]  \n{type_label}")
 
-        if f.get("evidence_dynamic"):
-            card_html += f"""
-            <div style="background: #21262d; border-radius: 6px; padding: 10px; margin-top: 8px; font-family: Courier; font-size: 12px; color: #79c0ff;">
-                <b style="color: #8b949e;">Evidence:</b> {f.get("evidence_dynamic")}
-            </div>
-            """
+            if owasp:
+                st.caption(owasp)
 
-        if f.get("payload"):
-            card_html += f"""
-            <div style="font-size: 11px; color: #8b949e; margin-top: 6px;">
-                <b>Payload:</b> <code style="color:#79c0ff">{f.get("payload")}</code>
-            </div>
-            """
+            # Evidence
+            if evidence:
+                with st.expander("📌 Evidence", expanded=True):
+                    st.code(evidence, language="text")
 
-        if f.get("remediation"):
-            card_html += f"""
-            <div style="background: rgba(63,185,80,0.05); border: 1px solid rgba(63,185,80,0.2); border-radius: 6px; padding: 10px; margin-top: 10px; font-size: 12px; color: #e6edf3;">
-                <b style="color: #3fb950;">💡 Remediation:</b> {f.get("remediation")}
-            </div>
-            """
+            # Payload
+            if payload:
+                st.markdown(f"**Payload:** `{payload}`")
 
-        card_html += "</div>"
-        st.markdown(card_html, unsafe_allow_html=True)
+            # Remediation
+            if remediation:
+                with st.expander("💡 Remediation"):
+                    st.markdown(remediation)
 
-
+            st.divider()
 # ── Main Logic ────────────────────────────────────────────────────────────────
 if scan_button:
     if not target_url and not source_dir:
