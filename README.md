@@ -1,199 +1,205 @@
 # WebVulnScanner
 
-**WebVulnScanner** is a lightweight hybrid static and dynamic web vulnerability scanner developed as part of a Master's graduation project. It combines source code analysis with active runtime testing to detect common web vulnerabilities aligned with the **OWASP Top 10 (2025)**.
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge" alt="Version" />
+  <img src="https://img.shields.io/badge/python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=for-the-badge" alt="License" />
+  <img src="https://img.shields.io/badge/OWASP-Top%2010-orange?style=for-the-badge" alt="OWASP" />
+</p>
 
-The tool supports both command-line and web-based interfaces and includes an optional AI Enhancement Layer for false positive reduction and remediation guidance.
+<p align="center">
+  <a href="https://github.com/moadh704/webvulnscanner/stargazers">
+    <img src="https://img.shields.io/github/stars/moadh704/webvulnscanner?style=flat-square&logo=github" alt="Stars" />
+  </a>
+  <a href="https://github.com/moadh704/webvulnscanner/network/members">
+    <img src="https://img.shields.io/github/forks/moadh704/webvulnscanner?style=flat-square&logo=github" alt="Forks" />
+  </a>
+  <a href="https://github.com/moadh704/webvulnscanner/issues">
+    <img src="https://img.shields.io/github/issues/moadh704/webvulnscanner?style=flat-square" alt="Issues" />
+  </a>
+  <img src="https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square" alt="Last commit" />
+  <img src="https://img.shields.io/github/languages/top/moadh704/webvulnscanner?style=flat-square" alt="Top language" />
+  <img src="https://img.shields.io/badge/interface-CLI%20%7C%20Streamlit-8A2BE2?style=flat-square" alt="Interface" />
+  <img src="https://img.shields.io/badge/analysis-static%20%2B%20dynamic-0ea5e9?style=flat-square" alt="Analysis" />
+  <img src="https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20Ollama-critical?style=flat-square" alt="AI providers" />
+</p>
 
-## ✨ Features
+<p align="center">
+  <img src="https://img.shields.io/badge/SQLi-supported-success?style=flat-square" alt="SQLi" />
+  <img src="https://img.shields.io/badge/XSS-supported-success?style=flat-square" alt="XSS" />
+  <img src="https://img.shields.io/badge/CMDi-supported-success?style=flat-square" alt="CMDi" />
+  <img src="https://img.shields.io/badge/Path%20Traversal-supported-success?style=flat-square" alt="Traversal" />
+  <img src="https://img.shields.io/badge/IDOR-supported-success?style=flat-square" alt="IDOR" />
+  <img src="https://img.shields.io/badge/Misconfig-supported-success?style=flat-square" alt="Misconfig" />
+</p>
 
-- **Hybrid Analysis**: Combines static (AST-based) and dynamic (active injection) detection
-- **Six Vulnerability Modules**: SQL Injection, Reflected XSS, Command Injection, Path Traversal, IDOR, and Security Misconfiguration
-- **Three-Tier Classification**: Verified (Type 1), Candidate (Type 2), Detected (Type 3)
-- **Selective Scanning**: Run only specific modules using `--scan`
-- **Dual Operating Modes**: Hybrid (with source code) + Dynamic-only (black-box)
-- **AI Enhancement Layer**: Optional false-positive review + context-aware remediation (Groq, Gemini, Ollama)
-- **Professional Reporting**: HTML reports with charts + JSON export
-- **User Interfaces**: Rich CLI + Streamlit web UI
-- **Easy Deployment**: One-click setup scripts for Windows
+Hybrid static + dynamic web vulnerability scanner (Master’s graduation project).  
+Analyzes source code and runs active tests against a live target. Aligns with common OWASP Top 10 issue classes.
 
-## 🚀 Installation
+CLI and Streamlit UI. Optional AI step for false-positive review and remediation notes (Groq, Gemini, or Ollama).
 
-### Quick Setup (Windows)
+## Features
+
+- Static (AST/rules) and dynamic (crawl + inject) analysis
+- Modules: SQLi, reflected XSS, command injection, path traversal, IDOR, security misconfiguration
+- Finding tiers: Verified (Type 1), Candidate (Type 2), Detected (Type 3)
+- Modes: `full` (hybrid), `static`, `dynamic`
+- Selective modules via `--scan`
+- Optional AI enhancement (false-positive review + remediation)
+- HTML and JSON reports
+- Rich CLI + Streamlit UI
+- Windows setup scripts (`setup.bat`, `ui.bat`)
+
+## Install
+
+Windows:
+
 ```bash
 git clone https://github.com/moadh704/webvulnscanner.git
 cd webvulnscanner
 setup.bat
 ```
 
-### Manual Installation
+Manual:
+
 ```bash
 git clone https://github.com/moadh704/webvulnscanner.git
 cd webvulnscanner
 pip install -r requirements.txt
+# optional package entry point:
+pip install -e .
 ```
 
-## 🚀 Quick Start
+## Quick start
 
-### 1. Basic Hybrid Scan (Recommended)
+Hybrid (source + live target):
+
 ```bash
 WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
 ```
 
-### 2. Dynamic-only Scan (No source code needed)
+Dynamic only (no source):
+
 ```bash
 WebVulnScanner --url http://localhost/mutillidae --mode dynamic
 ```
 
-Reports are saved in the `reports/` folder as HTML files.
+Reports go to `reports/` (HTML + JSON by default).
 
-## ⚙️ Configuration
-
-WebVulnScanner supports a `config.py` file for advanced settings.
-
-1. Copy the example configuration:
-   ```bash
-   cp config.example.py config.py
-   ```
-
-2. Edit `config.py` to customize:
-   - Request timeout and delays
-   - Maximum pages to crawl
-   - AI provider and API keys
-   - Report output directory
-
-> Most settings can also be overridden using command-line flags.
-
-## 🤖 AI Enhancement Setup (Optional)
-
-The AI layer can significantly reduce false positives and provide remediation suggestions.
-
-### Supported AI Providers
-
-| Provider   | Type     | Free Tier | Recommendation |
-|------------|----------|-----------|----------------|
-| **Groq**   | Cloud    | Yes       | ★★★★★ (Recommended) |
-| **Gemini** | Cloud    | Yes       | ★★★★       |
-| **Ollama** | Local    | Yes       | ★★★         |
-
-### How to Enable
-
-1. Get an API key:
-   - **Groq**: [console.groq.com](https://console.groq.com)
-   - **Gemini**: [aistudio.google.com](https://aistudio.google.com)
-
-2. Add the key in `config.py` or use the flag:
-   ```bash
-   WebVulnScanner --ai-provider groq
-   ```
-
-## 📊 Reports & Output
-
-After scanning, WebVulnScanner generates:
-
-- **HTML Report** with charts and detailed findings (saved in `reports/`)
-- **JSON export** for further processing
-
-You can open the HTML report directly in your browser.
-
-## ▶️ Usage
-
-### Command-Line Interface
-
-WebVulnScanner is installed as a console command. The recommended way to run it is:
+You can also run via:
 
 ```bash
-WebVulnScanner [options]
+python main.py --url http://localhost/dvwa --mode dynamic
 ```
 
-#### Basic Usage Examples
+## Configuration
 
 ```bash
-# Full hybrid scan (static + dynamic) - recommended for most cases
+cp config.example.py config.py
+```
+
+Edit `config.py` for timeouts, crawl limits, AI keys, and report paths. Most of this can also be set with CLI flags.
+
+## AI enhancement (optional)
+
+| Provider | Notes |
+|----------|--------|
+| Groq | Cloud; free tier available |
+| Gemini | Cloud; free tier available |
+| Ollama | Local |
+
+Set keys in `config.py`, or:
+
+```bash
+WebVulnScanner --url http://localhost/dvwa --ai-provider groq
+WebVulnScanner --url http://localhost/dvwa --no-ai
+```
+
+## Usage
+
+```bash
+# Hybrid
 WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
 
-# Dynamic-only (black-box) scan
+# Dynamic only
 WebVulnScanner --url http://localhost/dvwa --mode dynamic
 
-# Static-only analysis
+# Static only
 WebVulnScanner --url http://localhost/dvwa --mode static --src ./source-code/
 
-# Run only specific vulnerability modules
+# Specific modules
 WebVulnScanner --url http://localhost/dvwa --scan sqli,xss,cmdi
 
-# Disable AI enhancement layer
-WebVulnScanner --url http://localhost/dvwa --no-ai
-
-# Use a specific AI provider for analysis
-WebVulnScanner --url http://localhost/dvwa --ai-provider groq
-
-# Authenticated scan with credentials
-WebVulnScanner --url http://localhost/dvwa --username admin --password password
+# Auth + DVWA difficulty
+WebVulnScanner --url http://localhost/dvwa --username admin --password password --difficulty low
 ```
 
-#### Common Command-Line Options
+### Main options
 
-| Option              | Description                                                                 | Default     |
-|---------------------|-----------------------------------------------------------------------------|-------------|
-| `--url`             | Target web application URL (required)                                       | —           |
-| `--src`             | Path to the source code directory (enables hybrid/static analysis)          | —           |
-| `--scan`            | Comma-separated list of modules to enable (e.g. `sqli,xss,cmdi`)            | all         |
-| `--mode`            | Scan mode: `full` (hybrid), `static`, or `dynamic`                          | `full`      |
-| `--no-ai`           | Disable the AI Enhancement Layer                                            | enabled     |
-| `--ai-provider`     | AI provider to use for analysis (`groq`, `gemini`, or `none`)               | —           |
-| `--username`        | Username for authenticated scanning                                         | —           |
-| `--password`        | Password for authenticated scanning                                         | —           |
-| `--difficulty`      | Set application difficulty level (e.g. for DVWA)                            | —           |
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--url` | Target URL | required for dynamic/full |
+| `--src` | Source directory (static/hybrid) | — |
+| `--scan` | Modules: `sqli,xss,cmdi,traversal,idor,headers` | all |
+| `--mode` | `full` \| `static` \| `dynamic` | `full` |
+| `--output` | Report directory | `reports` |
+| `--output-format` | `html` \| `json` \| `both` | `both` |
+| `--username` / `--password` | Login for authenticated scans | — |
+| `--difficulty` | DVWA level: `low`–`impossible` | — |
+| `--ai-provider` | `groq` \| `gemini` \| `none` | config |
+| `--no-ai` | Disable AI layer | AI on if configured |
+| `--timeout` | Request timeout (seconds) | config |
+| `--max-pages` | Crawl limit | config |
+| `--report-name` | Custom report basename | auto |
+| `--verbose` / `--quiet` | Log detail | normal |
 
-> **Tip:** Run `WebVulnScanner --help` to see the complete list of available options.
+`WebVulnScanner --help` lists everything.
 
-### Web Interface
+### Web UI
 
-WebVulnScanner includes a modern Streamlit-based web interface for easier configuration and result visualization.
+Windows: double-click `ui.bat`, or:
 
-**Recommended for Windows users:**
-- Simply double-click the `ui.bat` file in the project root directory.
-
-**Alternative (cross-platform):**
 ```bash
 streamlit run app.py
 ```
 
-The web interface allows you to configure scans, monitor progress, and view detailed HTML reports directly in your browser.
+## Project layout
 
-## 📁 Project Structure
-
-```
+```text
 webvulnscanner/
-├── core/           # Core engine, correlation, reporting
-├── dynamic/        # Crawler + all injectors
-├── static/         # AST-based static analysis + YAML rules
+├── core/           # engine, correlation, reporting
+├── dynamic/        # crawler + injectors
+├── static/         # AST analysis + rules
 ├── templates/      # HTML report template
-├── payloads/       # Injection payloads
-├── app.py          # Streamlit web interface
-├── main.py         # CLI entry point
+├── payloads/       # injection payloads
+├── app.py          # Streamlit UI
+├── main.py         # CLI
 └── requirements.txt
 ```
 
-## 🔍 Supported Vulnerabilities (OWASP Top 10 2025)
+## Supported checks
 
-| Vulnerability                  | OWASP Category          | Detection Method     |
-|--------------------------------|-------------------------|----------------------|
-| SQL Injection                  | A05 - Injection         | Static + Dynamic     |
-| Reflected XSS                  | A05 - Injection         | Static + Dynamic     |
-| Command Injection              | A05 - Injection         | Static + Dynamic     |
-| Path Traversal                 | A01                     | Static + Dynamic     |
-| IDOR / Broken Access Control   | A01                     | Dynamic only         |
-| Security Misconfiguration      | A02                     | Dynamic only         |
+| Issue | OWASP area | Method |
+|-------|------------|--------|
+| SQL injection | Injection | Static + dynamic |
+| Reflected XSS | Injection | Static + dynamic |
+| Command injection | Injection | Static + dynamic |
+| Path traversal | Broken access / path issues | Static + dynamic |
+| IDOR / broken access control | Broken access control | Dynamic |
+| Security misconfiguration | Misconfiguration | Dynamic |
 
-## 📘 Thesis Information
+## Thesis
 
-This tool was developed as part of a Master's thesis:
+Built for a Master’s thesis:
 
-> **Automatic Detection of Web Application Vulnerabilities Using a Hybrid Static-Dynamic Approach**
+> Automatic Detection of Web Application Vulnerabilities Using a Hybrid Static-Dynamic Approach
 
-**Author**: Moadh and mamon  
-**Year**: 2026
+Authors: Moadh and Mamon · 2026
 
-## 📄 License
+## Disclaimer
 
-This project is licensed under the MIT License.
+Authorized testing and research only. Use only on systems you own or have permission to test.
+
+## License
+
+MIT
