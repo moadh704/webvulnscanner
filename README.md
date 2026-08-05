@@ -8,12 +8,6 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/moadh704/webvulnscanner/stargazers">
-    <img src="https://img.shields.io/github/stars/moadh704/webvulnscanner?style=flat-square&logo=github" alt="Stars" />
-  </a>
-  <a href="https://github.com/moadh704/webvulnscanner/network/members">
-    <img src="https://img.shields.io/github/forks/moadh704/webvulnscanner?style=flat-square&logo=github" alt="Forks" />
-  </a>
   <a href="https://github.com/moadh704/webvulnscanner/issues">
     <img src="https://img.shields.io/github/issues/moadh704/webvulnscanner?style=flat-square" alt="Issues" />
   </a>
