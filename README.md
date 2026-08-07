@@ -86,6 +86,17 @@ You can also run via:
 python main.py --url http://localhost/dvwa --mode dynamic
 ```
 
+## Sample output
+
+Example reports from **local lab targets only** (DVWA / bWAPP) are in [`docs/examples/`](docs/examples/):
+
+| Sample | Target | What it shows |
+|--------|--------|----------------|
+| [sample-report-dvwa.html](docs/examples/sample-report-dvwa.html) (+ [JSON](docs/examples/sample-report-dvwa.json)) | `http://localhost/dvwa` | Hybrid-style run, **~53 findings**, severity tiers, Groq AI notes |
+| [sample-report-bwapp-xss.html](docs/examples/sample-report-bwapp-xss.html) (+ [JSON](docs/examples/sample-report-bwapp-xss.json)) | `http://localhost/bWAPP/xss_get.php` | Focused **reflected XSS** with AI remediation text |
+
+Open the HTML files in a browser. Paths inside samples are sanitized; no production targets.
+
 ## Configuration
 
 ```bash
@@ -166,6 +177,7 @@ webvulnscanner/
 ├── static/         # AST analysis + rules
 ├── templates/      # HTML report template
 ├── payloads/       # injection payloads
+├── docs/examples/  # sample HTML/JSON reports (lab targets)
 ├── app.py          # Streamlit UI
 ├── main.py         # CLI
 └── requirements.txt
