@@ -58,6 +58,21 @@ DESTRUCTIVE_PATH_FRAGMENTS = [
     'set-up-database.php',
 ]
 
+# Content types that are never pages: downloading/parsing these as HTML
+# produces garbage endpoints and wastes requests. Anything else — including
+# responses with a missing or text/* content type (some legacy apps serve
+# HTML with no header at all) — is treated as a crawlable page.
+BINARY_CONTENT_TYPES = (
+    'image/', 'video/', 'audio/', 'font/',
+    'application/pdf',
+    'application/zip', 'application/x-7z-compressed',
+    'application/x-rar-compressed', 'application/gzip',
+    'application/x-gzip', 'application/x-tar',
+    'application/octet-stream',
+    'application/msword', 'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.',
+)
+
 
 # ── Login form auto-detection ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -373,9 +388,17 @@ class Crawler:
         if effective_url != clean_url:
             self.visited.add(effective_url)
 
-        # Check if JSON response — it's an API endpoint
+        # Non-page content (PDFs, images, archives, raw binary): nothing to
+        # crawl or parse — don't let it pollute the endpoint list.
+        if self._is_binary(response):
+            print(f"  [Crawler] Skipped (non-HTML content): "
+                  f"{effective_url} [{response.headers.get('content-type', '?')}]")
+            return
+
+        # JSON response — it's an API endpoint, not an HTML page.
         if self._is_json(response):
             self._add_api_endpoint(effective_url)
+            return
 
         soup = BeautifulSoup(response.text, 'html.parser')
         parsed = urlparse(effective_url)
@@ -528,6 +551,22 @@ class Crawler:
         try:
             json.loads(response.text)
             return True
+        except Exception:
+            return False
+
+    def _is_binary(self, response) -> bool:
+        """
+        Heuristic for "this response is not a web page": a known binary
+        content type, or binary signature bytes (NUL bytes) in the body.
+        Missing content-type is treated as HTML — several legacy apps serve
+        pages with no header at all, and those must still be crawled.
+        """
+        content_type = response.headers.get('content-type', '').lower()
+        for prefix in BINARY_CONTENT_TYPES:
+            if content_type.startswith(prefix):
+                return True
+        try:
+            return b'\x00' in response.content[:2048]
         except Exception:
             return False
 
