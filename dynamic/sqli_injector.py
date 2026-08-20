@@ -174,6 +174,14 @@ class SQLiInjector:
         return None
 
     def _test_time_based(self, ep: dict, param: str) -> dict:
+        # Measure the endpoint's baseline latency first: a benign request
+        # to the same param. The SLEEP() delta is then compared against
+        # this baseline, so slow apps (or slow networks) don't cause
+        # false positives and fast apps still detect true delays.
+        baseline = self._measure_baseline(ep, param)
+        if baseline is None:
+            return None
+
         for payload in TIME_PAYLOADS:
             start    = time.time()
             response = self._send(ep, param, payload)
@@ -184,14 +192,37 @@ class SQLiInjector:
                 if self._reauth():
                     continue
                 return None
-            if elapsed >= config.TIME_BASED_DELAY:
+            delta = elapsed - baseline
+            # The injected sleep must account for most of the observed
+            # delay beyond baseline (threshold minus a 1s tolerance).
+            if delta >= max(2.0, config.TIME_BASED_DELAY - 1.0):
                 print(f"  [SQLi] ✓ Time-based: {ep['url']} "
-                      f"param='{param}' delay={elapsed:.1f}s")
+                      f"param='{param}' delay={elapsed:.1f}s "
+                      f"(baseline={baseline:.1f}s, delta={delta:.1f}s)")
                 return self._make_finding(
                     ep, param, payload, "time-based",
-                    f"Response delayed {elapsed:.1f}s"
+                    f"Response delayed {elapsed:.1f}s "
+                    f"(baseline {baseline:.1f}s, delta {delta:.1f}s)"
                 )
         return None
+
+    def _measure_baseline(self, ep: dict, param: str):
+        """
+        Median latency of benign requests to the same endpoint/param.
+        Returns seconds, or None when the endpoint is unreachable.
+        """
+        benign   = ep['params'].get(param) or '1'
+        samples  = []
+        for _ in range(3):
+            start    = time.time()
+            response = self._send(ep, param, benign)
+            if response is None:
+                continue
+            samples.append(time.time() - start)
+        if not samples:
+            return None
+        samples.sort()
+        return samples[len(samples) // 2]
 
     def _test_boolean_based(self, ep: dict, param: str) -> dict:
         for true_p, false_p in BOOLEAN_PAYLOADS:
