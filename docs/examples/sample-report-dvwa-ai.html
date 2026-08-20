@@ -1,0 +1,2302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVulnScanner Report</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0d1117;
+            --surface:   #161b22;
+            --surface2:  #21262d;
+            --surface3:  #30363d;
+            --border:    #30363d;
+            --text:      #e6edf3;
+            --text-muted:#8b949e;
+            --critical:  #ff4444;
+            --high:      #ff8c00;
+            --medium:    #f0c040;
+            --low:       #3fb950;
+            --blue:      #58a6ff;
+            --purple:    #bc8cff;
+            --teal:      #39d353;
+        }
+
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+        /* ── Header ── */
+        .header { background: linear-gradient(135deg, #0d1117, #1a2332); border-bottom: 1px solid var(--border); padding: 30px 40px; }
+        .header h1 { font-size: 26px; font-weight: 700; color: var(--blue); }
+        .header p { color: var(--text-muted); margin-top: 4px; font-size: 14px; }
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 20px; }
+        .meta-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+        .meta-item .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .meta-item .value { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+
+        /* ── Summary ── */
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; padding: 24px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .summary-card { text-align: center; padding: 16px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); transition: transform 0.2s, border-color 0.2s; cursor: default; }
+        .summary-card:hover { transform: translateY(-2px); }
+        .summary-card .count { font-size: 32px; font-weight: 700; }
+        .summary-card .label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.3px; }
+        .card-critical { border-color: var(--critical) !important; color: var(--critical); }
+        .card-high     { border-color: var(--high) !important; color: var(--high); }
+        .card-medium   { border-color: var(--medium) !important; color: var(--medium); }
+        .card-low      { border-color: var(--low) !important; color: var(--low); }
+        .card-total    { border-color: var(--blue) !important; color: var(--blue); }
+        .card-verified { border-color: var(--teal) !important; color: var(--teal); }
+        .card-candidate{ border-color: var(--medium) !important; color: var(--medium); }
+        .card-detected { border-color: var(--blue) !important; color: var(--blue); }
+
+        /* ── Legend ── */
+        .legend-section { padding: 16px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .legend-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+        .legend-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: flex-start; gap: 10px; }
+        .legend-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; white-space: nowrap; margin-top: 2px; }
+        .legend-text { font-size: 12px; color: var(--text-muted); max-width: 220px; }
+        .legend-text strong { color: var(--text); }
+
+        /* ── Charts ── */
+        .charts-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .chart-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+        .chart-box h3 { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .chart-container { position: relative; height: 200px; }
+
+        /* ── Badges ── */
+        .type-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .type-verified  { background: rgba(57,211,83,0.15);  color: var(--teal);   border: 1px solid rgba(57,211,83,0.3); }
+        .type-candidate { background: rgba(240,192,64,0.15); color: var(--medium); border: 1px solid rgba(240,192,64,0.3); }
+        .type-detected  { background: rgba(88,166,255,0.15); color: var(--blue);   border: 1px solid rgba(88,166,255,0.3); }
+
+        .sev-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .sev-critical { background: rgba(255,68,68,0.2);   color: var(--critical); border: 1px solid rgba(255,68,68,0.4); }
+        .sev-high     { background: rgba(255,140,0,0.2);   color: var(--high);     border: 1px solid rgba(255,140,0,0.4); }
+        .sev-medium   { background: rgba(240,192,64,0.2);  color: var(--medium);   border: 1px solid rgba(240,192,64,0.4); }
+        .sev-low      { background: rgba(63,185,80,0.2);   color: var(--low);      border: 1px solid rgba(63,185,80,0.4); }
+
+        /* ── Confidence bar ── */
+        .confidence-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+        .conf-track { width: 70px; height: 5px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+        .conf-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--low), var(--blue)); }
+
+        /* ── Findings ── */
+        .findings { padding: 24px 40px; }
+        .findings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .findings-header h2 { font-size: 18px; color: var(--text); }
+        .expand-all-btn { background: var(--surface2); color: var(--blue); border: 1px solid var(--blue); padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: background 0.2s; }
+        .expand-all-btn:hover { background: rgba(88,166,255,0.1); }
+
+        .finding-card { background: var(--surface); border-radius: 10px; border-left: 4px solid var(--border); margin-bottom: 10px; border: 1px solid var(--border); border-left: 4px solid; overflow: hidden; transition: border-color 0.2s; }
+        .finding-card.critical { border-left-color: var(--critical); }
+        .finding-card.high     { border-left-color: var(--high); }
+        .finding-card.medium   { border-left-color: var(--medium); }
+        .finding-card.low      { border-left-color: var(--low); }
+
+        .finding-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: var(--surface2); user-select: none; }
+        .finding-header:hover { background: var(--surface3); }
+        .finding-header h3 { flex: 1; font-size: 13px; color: var(--text); font-weight: 500; }
+        .toggle-icon { font-size: 14px; color: var(--text-muted); transition: transform 0.2s; min-width: 16px; }
+        .finding-card.open .toggle-icon { transform: rotate(180deg); }
+
+        .finding-body { padding: 16px; border-top: 1px solid var(--border); display: none; background: var(--surface); }
+        .finding-card.open .finding-body { display: block; }
+
+        .evidence-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 8px 0; font-family: 'Courier New', monospace; font-size: 12px; color: #79c0ff; white-space: pre-wrap; word-break: break-all; }
+        .remediation-block { background: rgba(63,185,80,0.05); border: 1px solid rgba(63,185,80,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 13px; color: var(--text); }
+        .ai-note-block { background: rgba(240,192,64,0.05); border: 1px solid rgba(240,192,64,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 12px; color: var(--text); }
+
+        .field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
+
+        .dismissed { opacity: 0.4; }
+        .dismissed-banner { color: var(--critical); font-size: 12px; margin-top: 8px; padding: 6px 10px; background: rgba(255,68,68,0.1); border-radius: 4px; }
+
+        /* ── Footer ── */
+        .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); background: var(--surface); margin-top: 20px; }
+
+        @media (max-width: 768px) { .charts-section { grid-template-columns: 1fr; } .header, .summary, .findings { padding: 16px 20px; } .legend-grid { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>🔍 WebVulnScanner — Security Report</h1>
+    <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
+    <div class="meta-grid">
+        <div class="meta-item"><div class="label">Target URL</div><div class="value">http://localhost/dvwa</div></div>
+        <div class="meta-item"><div class="label">Source Directory</div><div class="value">C:\xampp\htdocs\dvwa</div></div>
+        <div class="meta-item"><div class="label">Scan Date</div><div class="value">2026-08-20 18:18:18</div></div>
+        <div class="meta-item"><div class="label">AI Provider</div><div class="value">deepseek-flash</div></div>
+        <div class="meta-item"><div class="label">Total Findings</div><div class="value">53</div></div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary">
+    <div class="summary-card card-total"><div class="count">53</div><div class="label">Total</div></div>
+    <div class="summary-card card-critical"><div class="count">8</div><div class="label">Critical</div></div>
+    <div class="summary-card card-high"><div class="count">23</div><div class="label">High</div></div>
+    <div class="summary-card card-medium"><div class="count">19</div><div class="label">Medium</div></div>
+    <div class="summary-card card-low"><div class="count">3</div><div class="label">Low</div></div>
+    <div class="summary-card card-verified"><div class="count">5</div><div class="label">Verified</div></div>
+    <div class="summary-card card-candidate"><div class="count">40</div><div class="label">Candidate</div></div>
+    <div class="summary-card card-detected"><div class="count">12</div><div class="label">Detected</div></div>
+</div>
+
+<!-- Legend -->
+<div class="legend-section">
+    <div class="legend-title">Finding Classification</div>
+    <div class="legend-grid">
+        <div class="legend-item">
+            <span class="legend-badge type-verified">Verified</span>
+            <div class="legend-text"><strong>Static + Dynamic confirmed</strong> — Semgrep found suspicious code AND the injector confirmed it is exploitable. Highest confidence (90%+).</div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-badge type-candidate">Candidate</span>
+            <div class="legend-text"><strong>Static only, unconfirmed</strong> — Semgrep flagged suspicious code but the injector could not confirm. Reviewed by AI for false positives (40%).</div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-badge type-detected">Detected</span>
+            <div class="legend-text"><strong>Runtime only</strong> — The dynamic injector triggered a vulnerability at runtime. No source code match available (65%).</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+
+<div class="charts-section">
+    <div class="chart-box">
+        <h3>Findings by Severity</h3>
+        <div class="chart-container"><canvas id="severityChart"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <h3>Findings by Vulnerability Type</h3>
+        <div class="chart-container"><canvas id="typeChart"></canvas></div>
+    </div>
+</div>
+
+
+<!-- Findings -->
+<div class="findings">
+    <div class="findings-header">
+        <h2>Findings (53)</h2>
+        <button class="expand-all-btn" onclick="toggleAll()">Expand All</button>
+    </div>
+
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-1">
+        <div class="finding-header" onclick="toggleCard('card-1')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[SQLI] http://localhost/dvwa/vulnerabilities/sqli/ — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\low.php, Line: 5
+Rule: php-sqli-taint-request
+Pattern: User input from $_REQUEST used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&#39;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-2">
+        <div class="finding-header" onclick="toggleCard('card-2')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[SQLI] http://localhost/dvwa/vulnerabilities/sqli_blind/ — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Response delayed 5.0s (baseline 0.0s, delta 5.0s)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">1&#39; AND SLEEP(5)-- </code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-3">
+        <div class="finding-header" onclick="toggleCard('card-3')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/xss_r/ — <code style="color:#79c0ff;">name</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\xss_r\source\low.php, Line: 8
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-4">
+        <div class="finding-header" onclick="toggleCard('card-4')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/csp/ — <code style="color:#79c0ff;">include</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\low.php, Line: 14
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-5">
+        <div class="finding-header" onclick="toggleCard('card-5')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[CMDI] http://localhost/dvwa/vulnerabilities/exec/ — <code style="color:#79c0ff;">ip</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\low.php, Line: 5
+Rule: php-cmdi-taint-shell-exec-request
+Pattern: User input from $_REQUEST assigned to variable then concatenated into shell_exec(). This allows OS command injection. Use escapeshellarg().
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Command output pattern detected: &#39;volume serial&#39;</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">| dir</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-10">
+        <div class="finding-header" onclick="toggleCard('card-10')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[IDOR] http://localhost/dvwa/vulnerabilities/open_redirect/source/info.php?id=1 — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A01:2025 - Broken Access Control</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">ID 1 returns 4843 bytes, ID 2 returns 4733 bytes — different user-specific content accessible without authorization check</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">2</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-11">
+        <div class="finding-header" onclick="toggleCard('card-11')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[IDOR] http://localhost/dvwa/vulnerabilities/open_redirect/source/info.php?id=2 — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A01:2025 - Broken Access Control</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">ID 2 returns 4733 bytes, ID 1 returns 4843 bytes — different user-specific content accessible without authorization check</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">1</code></div>
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-13">
+        <div class="finding-header" onclick="toggleCard('card-13')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[CMDI] C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\medium.php, Line: 5
+Rule: php-cmdi-taint-shell-exec-request
+Pattern: User input from $_REQUEST assigned to variable then concatenated into shell_exec(). This allows OS command injection. Use escapeshellarg().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">Item 2: REAL — The input is only filtered for `&amp;&amp;` and `;`, so shell metacharacters like `|` still reach `shell_exec()` after authentication.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-14">
+        <div class="finding-header" onclick="toggleCard('card-14')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/xss_s/ — <code style="color:#79c0ff;">txtName</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-15">
+        <div class="finding-header" onclick="toggleCard('card-15')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Content-Security-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Content-Security-Policy&#39; is missing. Risk: No XSS mitigation policy — scripts from any source allowed</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-16">
+        <div class="finding-header" onclick="toggleCard('card-16')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-17">
+        <div class="finding-header" onclick="toggleCard('card-17')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 24
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-18">
+        <div class="finding-header" onclick="toggleCard('card-18')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php, Line: 17
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-19">
+        <div class="finding-header" onclick="toggleCard('card-19')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-20">
+        <div class="finding-header" onclick="toggleCard('card-20')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 13
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-21">
+        <div class="finding-header" onclick="toggleCard('card-21')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">Item 6: REAL — The GET username parameter is concatenated directly into a mysqli_query without sanitization or prepared statements, making the login function dynamically reachable and SQL injection vulnerable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-22">
+        <div class="finding-header" onclick="toggleCard('card-22')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">Item 7: REAL — The unsanitized `$_GET[&#39;username&#39;]` is concatenated directly into a `mysqli_query()` SQL string and is reachable via the login form, so SQL injection remains possible even if the attempted payloads did not confirm it.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-23">
+        <div class="finding-header" onclick="toggleCard('card-23')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by ConnectTimeoutError(&lt;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443) at 0x186b3371590&gt;, &#39;Connection to api.deepseek.com timed out. (connect timeout=120)&#39;)))</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-24">
+        <div class="finding-header" onclick="toggleCard('card-24')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 9
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-25">
+        <div class="finding-header" onclick="toggleCard('card-25')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 8
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-26">
+        <div class="finding-header" onclick="toggleCard('card-26')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 9
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-27">
+        <div class="finding-header" onclick="toggleCard('card-27')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 50
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-28">
+        <div class="finding-header" onclick="toggleCard('card-28')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 51
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-29">
+        <div class="finding-header" onclick="toggleCard('card-29')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 51
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-30">
+        <div class="finding-header" onclick="toggleCard('card-30')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 52
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-32">
+        <div class="finding-header" onclick="toggleCard('card-32')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php, Line: 6
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-34">
+        <div class="finding-header" onclick="toggleCard('card-34')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-35">
+        <div class="finding-header" onclick="toggleCard('card-35')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 12
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-36">
+        <div class="finding-header" onclick="toggleCard('card-36')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 16
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-37">
+        <div class="finding-header" onclick="toggleCard('card-37')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php, Line: 5
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">Item 6: REAL — The code uses mysqli_real_escape_string but places $id unquoted into the SQL query, so attacker-controlled input can still inject SQL via numeric/UNION payloads and must use prepared statements.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-38">
+        <div class="finding-header" onclick="toggleCard('card-38')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php, Line: 5
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">Item 7: REAL — Though mysqli_real_escape_string is applied, the user ID is concatenated into an unquoted numeric query, so SQL injection remains exploitable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-39">
+        <div class="finding-header" onclick="toggleCard('card-39')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">X-Frame-Options</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;X-Frame-Options&#39; is missing. Risk: Clickjacking attacks — page can be embedded in iframes</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-40">
+        <div class="finding-header" onclick="toggleCard('card-40')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\instructions.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\instructions.php, Line: 20
+Rule: php-xss-taint-mutillidae-source-only
+Pattern: User input from $_GET/$_POST/$_REQUEST captured into a variable via a ternary expression (isset, ternary-wraps-assignment, or null-coalescing). Static engine cannot trace the variable across HTML/PHP interpolation blocks. If this variable reaches an echo without htmlspecialchars(), it is reflected XSS. Verify dynamically.
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-41">
+        <div class="finding-header" onclick="toggleCard('card-41')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-42">
+        <div class="finding-header" onclick="toggleCard('card-42')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 24
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-43">
+        <div class="finding-header" onclick="toggleCard('card-43')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php, Line: 17
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-44">
+        <div class="finding-header" onclick="toggleCard('card-44')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 8
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-45">
+        <div class="finding-header" onclick="toggleCard('card-45')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 13
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-46">
+        <div class="finding-header" onclick="toggleCard('card-46')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 5
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-47">
+        <div class="finding-header" onclick="toggleCard('card-47')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 8
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-48">
+        <div class="finding-header" onclick="toggleCard('card-48')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-49">
+        <div class="finding-header" onclick="toggleCard('card-49')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 9
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-50">
+        <div class="finding-header" onclick="toggleCard('card-50')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\high.php, Line: 9
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-51">
+        <div class="finding-header" onclick="toggleCard('card-51')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\impossible.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\impossible.php, Line: 10
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-52">
+        <div class="finding-header" onclick="toggleCard('card-52')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\medium.php, Line: 15
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-53">
+        <div class="finding-header" onclick="toggleCard('card-53')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 12
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-54">
+        <div class="finding-header" onclick="toggleCard('card-54')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 16
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-55">
+        <div class="finding-header" onclick="toggleCard('card-55')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-56">
+        <div class="finding-header" onclick="toggleCard('card-56')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php, Line: 5
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-57">
+        <div class="finding-header" onclick="toggleCard('card-57')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">REAL (DeepSeek error: HTTPSConnectionPool(host=&#39;api.deepseek.com&#39;, port=443): Max retries exceeded with url: /chat/completions (Caused by NameResolutionError(&#34;HTTPSConnection(host=&#39;api.deepseek.com&#39;, port=443): Failed to resolve &#39;api.deepseek.com&#39; ([Errno 11001] getaddrinfo failed)&#34;)))</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-58">
+        <div class="finding-header" onclick="toggleCard('card-58')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">X-Content-Type-Options</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;X-Content-Type-Options&#39; is missing. Risk: MIME-type sniffing — browser may misinterpret content</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-59">
+        <div class="finding-header" onclick="toggleCard('card-59')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Referrer-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Referrer-Policy&#39; is missing. Risk: URL data leaked to third parties via Referer header</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-60">
+        <div class="finding-header" onclick="toggleCard('card-60')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Permissions-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Permissions-Policy&#39; is missing. Risk: No browser feature restrictions defined</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+
+    
+</div>
+<div class="footer">Generated by WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner</div>
+<script>
+function toggleCard(id) { document.getElementById(id).classList.toggle('open'); }
+let allExpanded = false;
+function toggleAll() {
+    const cards = document.querySelectorAll('.finding-card');
+    const btn = document.querySelector('.expand-all-btn');
+    allExpanded = !allExpanded;
+    cards.forEach(c => allExpanded ? c.classList.add('open') : c.classList.remove('open'));
+    btn.textContent = allExpanded ? 'Collapse All' : 'Expand All';
+}
+const firstCard = document.querySelector('.finding-card');
+if (firstCard) firstCard.classList.add('open');
+
+
+const severityCounts = {
+    Critical: 8,
+    High: 23,
+    Medium: 19,
+    Low: 3,
+};
+const sevLabels = Object.keys(severityCounts).filter(k => severityCounts[k] > 0);
+const sevData = sevLabels.map(k => severityCounts[k]);
+new Chart(document.getElementById('severityChart'), {
+    type: 'doughnut',
+    data: { labels: sevLabels, datasets: [{ data: sevData, backgroundColor: ['#ff4444','#ff8c00','#f0c040','#3fb950'], borderWidth: 2, borderColor: '#21262d' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8b949e', font: { size: 11 } } } } }
+});
+const typeCounts = {};
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "CMDI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "IDOR"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "IDOR"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "CMDI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+new Chart(document.getElementById('typeChart'), {
+    type: 'bar',
+    data: { labels: Object.keys(typeCounts), datasets: [{ data: Object.values(typeCounts), backgroundColor: ['#58a6ff','#bc8cff','#39d353','#ff4444','#ff8c00','#f0c040'], borderRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8b949e' }, grid: { color: '#30363d' } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } } } }
+});
+
+</script>
+</body>
+</html>

@@ -197,6 +197,7 @@ Real output from a full hybrid scan of a **local DVWA lab** (security level: low
 | Sample | Target | Notes |
 |--------|--------|-------|
 | [HTML report](docs/examples/sample-report-dvwa.html) | `http://localhost/dvwa` | Full interactive report with severity charts, no AI |
+| [AI-reviewed HTML](docs/examples/sample-report-dvwa-ai.html) | `http://localhost/dvwa` | Same scan + **DeepSeek V4 Flash** — 7 findings dismissed as false positives |
 | [Results table](docs/examples/sample-results-dvwa.md) | `http://localhost/dvwa` | Readable findings summary from the same run |
 | [JSON](docs/examples/sample-report-dvwa.json) | `http://localhost/dvwa` | Machine-readable, for tooling demos |
 | [bWAPP XSS](docs/examples/sample-report-bwapp-xss.html) | `http://localhost/bWAPP/xss_get.php` | Focused reflected XSS run |
