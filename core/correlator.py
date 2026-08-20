@@ -35,6 +35,16 @@ TECHNIQUE_PRIORITY = {
 ROUTING_PARAMS = {'page', 'file', 'doc', 'path', 'include', 'redirect',
                   'bug', 'view', 'load'}
 
+# Path segments that are never vulnerability-specific and must never
+# contribute to a match score (framework/app plumbing, OS roots, the
+# user's own folder names on Windows).
+SKIP_SEGMENTS = {
+    'index', 'login', 'logout', 'home', 'main',
+    'app', 'src', 'lib', 'includes', 'config',
+    'htdocs', 'www', 'public', 'html', 'php',
+    'xampp', 'users', 'dell', 'desktop', 'source',
+}
+
 
 class Correlator:
     """
@@ -52,6 +62,17 @@ class Correlator:
     - Type 2: no boost (forwarded to AI layer for review)
     """
 
+    def __init__(self, difficulty=None):
+        """
+        difficulty: the target's security level (low/medium/high/impossible)
+        used by the dynamic phase. Static findings whose source-file variant
+        matches this level are preferred during correlation. None when not
+        applicable (e.g. bWAPP / Mutillidae).
+        """
+        self.difficulty    = difficulty
+        self._app_segments = set()     # app root per URL, computed on demand
+        self._all_file_paths = []      # split file paths from this run
+
     def correlate(self, all_findings: list) -> list:
         """
         Main entry point. Takes combined static + dynamic findings,
@@ -66,6 +87,13 @@ class Correlator:
 
         print(f"  [Correlator] Input: {len(static_findings)} static, "
               f"{len(dynamic_findings)} dynamic findings.")
+
+        # Split static file paths once; the app root is derived per URL
+        # from these (see _common_app_segments).
+        self._all_file_paths = [
+            f.get('file', '').replace('\\', '/').lower().split('/')
+            for f in static_findings if f.get('file')
+        ]
 
         # Step 1: Start with all dynamic findings (already have URL + param)
         result = {}
@@ -91,11 +119,11 @@ class Correlator:
                     best_score = score
                     best_sf    = sf
 
-            # Require score >= 2 to upgrade. A bare directory-name overlap
-            # (score == 1) is too weak — it correlates everything in an
-            # application to everything else. We need at least one
-            # vulnerability-specific path component matching.
-            if best_sf and best_score >= 2:
+            # Require at least one vulnerability-specific path component
+            # to overlap. The app's own base segments are stripped from
+            # both sides beforehand, so a bare app-directory overlap no
+            # longer counts. A difficulty-level match adds a bonus.
+            if best_sf and best_score >= 10:
                 # Upgrade to Type 1
                 result[key]['finding_type']   = 1
                 result[key]['confidence']      = 0.90
@@ -163,6 +191,29 @@ class Correlator:
         param     = finding.get('parameter', '')
         return f"{vuln_type}|{url}|{param}"
 
+    def _common_app_segments(self, url_path_segments: list) -> set:
+        """
+        Determine which segments of the URL path are the application's
+        base (e.g. "dvwa", "vulnerabilities") rather than a specific
+        endpoint. A segment is considered app base if it appears in at
+        least half of the static file paths from this run (so it is
+        shared plumbing, not a per-endpoint name). These segments are
+        stripped from BOTH sides during matching so they never inflate
+        a score.
+        """
+        n = len(self._all_file_paths)
+        if n == 0:
+            return set()
+        threshold = max(1, int(n * 0.5))
+        app = set()
+        for seg in url_path_segments:
+            if seg in SKIP_SEGMENTS:
+                continue
+            count = sum(1 for p in self._all_file_paths if seg in p)
+            if count >= threshold:
+                app.add(seg)
+        return app
+
     def _match_score(self, sf: dict, df: dict) -> int:
         """
         Return a numeric match score between a static and dynamic finding.
@@ -170,15 +221,17 @@ class Correlator:
 
         Algorithm:
           1. Both findings must share the same vuln_type.
-          2. Build sets of "meaningful" path components from the static
-             file path and the dynamic URL path (skipping common
-             directories and the file extension).
+          2. Split the static file path and the dynamic URL path into
+             meaningful components, stripping the application's base
+             path (derived per URL from the static corpus) so a shared
+             app directory never inflates the score.
           3. For router-style apps where the actual page is referenced
              by query string (e.g. ?page=dns-lookup.php), parse those
              routing parameters and add their basenames to the URL
-             component set so router-based URLs can correlate to the
-             static-analyzed source files they dispatch to.
-          4. Return the count of overlapping components.
+             component set.
+          4. Score = 10 per overlapping vulnerability-specific component,
+             plus 1 bonus when the static file's difficulty variant
+             (source/low.php etc.) matches the scan difficulty.
 
         See ROUTING_PARAMS above for the list of recognized routing
         query parameter names.
@@ -189,35 +242,31 @@ class Correlator:
         file_path = sf.get('file', '').replace('\\', '/').lower()
         url       = df.get('url', '').lower()
 
-        SKIP_SEGMENTS = {
-            'index', 'login', 'logout', 'home', 'main',
-            'app', 'src', 'lib', 'includes', 'config',
-            'htdocs', 'www', 'public', 'html', 'php',
-            'xampp', 'users', 'dell', 'desktop',
-        }
+        parsed    = urlparse(url)
+        url_path  = parsed.path
 
-        # File path components (filename basename minus the .php extension
-        # is included; intermediate directories that survive the SKIP filter
-        # are also included).
+        # Raw URL path segments (no extension stripping, no filtering) —
+        # used only to detect the app base.
+        raw_url_segs = [p for p in url_path.split('/') if p]
+
+        # App base segments that must not count toward a match
+        app = self._common_app_segments(raw_url_segs)
+
+        # File path components, minus app base and plumbing segments
         file_parts = []
         for p in file_path.split('/'):
-            if not p or len(p) <= 2:
+            if not p or len(p) <= 2 or p in SKIP_SEGMENTS:
                 continue
-            if p in SKIP_SEGMENTS:
+            if p in app:
                 continue
-            # Strip extensions so "dns-lookup.php" matches "dns-lookup"
             base = self._strip_ext(p)
             if base and base not in SKIP_SEGMENTS:
                 file_parts.append(base)
 
-        # URL components: path segments + values from routing query parameters.
-        parsed    = urlparse(url)
-        url_path  = parsed.path
-        url_parts = [p for p in url_path.split('/')
-                     if p and len(p) > 2]
-
-        # Strip trailing extension from URL path components too
-        url_parts = [self._strip_ext(p) for p in url_parts]
+        # URL components: path segments + values from routing query params.
+        url_parts = [self._strip_ext(p) for p in url_path.split('/')
+                     if p and len(p) > 2 and p not in SKIP_SEGMENTS]
+        url_parts = [p for p in url_parts if p not in app]
 
         # Add routing-param values (e.g. ?page=dns-lookup.php → "dns-lookup")
         if parsed.query:
@@ -228,19 +277,33 @@ class Correlator:
                         # Take the basename (strip path), then strip extension
                         basename = value.replace('\\', '/').split('/')[-1]
                         basename = self._strip_ext(basename.lower())
-                        if basename and len(basename) > 2:
+                        if (basename and len(basename) > 2
+                                and basename not in SKIP_SEGMENTS
+                                and basename not in app):
                             url_parts.append(basename)
 
-        # Filter out skipped segments from URL parts as well (e.g. drop
-        # "dvwa" / "mutillidae" / "index" so they don't inflate the score)
-        url_parts_set = set(p for p in url_parts if p not in SKIP_SEGMENTS)
+        # Count overlapping vulnerability-specific segments
+        file_parts_set = set(file_parts)
+        url_parts_set  = set(url_parts)
+        overlap = len(file_parts_set & url_parts_set)
 
-        # Same filter for file_parts (drop app dir name like "dvwa"/"mutillidae")
-        file_parts_set = set(p for p in file_parts if p not in SKIP_SEGMENTS)
+        score = overlap * 10
 
-        # Count overlapping meaningful segments
-        score = len(file_parts_set & url_parts_set)
+        # Difficulty-variant bonus: prefer source/low.php when scanning low
+        if self.difficulty:
+            diff_segment = self._difficulty_variant(file_path)
+            if diff_segment == self.difficulty:
+                score += 1
+
         return score
+
+    @staticmethod
+    def _difficulty_variant(file_path: str) -> str:
+        """Extract a DVWA-style difficulty segment from a file path."""
+        for level in ('impossible', 'high', 'medium', 'low'):
+            if f'/{level}' in file_path:
+                return level
+        return ''
 
     @staticmethod
     def _strip_ext(s: str) -> str:
@@ -251,8 +314,8 @@ class Correlator:
         return s
 
     def _static_matches_dynamic(self, sf: dict, df: dict) -> bool:
-        """Convenience wrapper — returns True if score >= 2."""
-        return self._match_score(sf, df) >= 2
+        """Convenience wrapper — returns True if score >= 10."""
+        return self._match_score(sf, df) >= 10
 
     # ── Severity boost ────────────────────────────────────────────────────────
 

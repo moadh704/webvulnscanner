@@ -633,7 +633,8 @@ def main():
                       f"{len(all_findings) - len(static_findings)} dynamic")
         from core.correlator import Correlator
         with _QuietMode(quiet):
-            all_findings = Correlator().correlate(all_findings)
+            all_findings = Correlator(difficulty=args.difficulty) \
+                .correlate(all_findings)
 
     # ── AI Enhancement ────────────────────────────────────────────────────────
     if all_findings and use_ai:
