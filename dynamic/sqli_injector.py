@@ -39,13 +39,13 @@ ERROR_PAYLOADS = [
 ]
 
 TIME_PAYLOADS = [
-    "1' AND SLEEP(5)--",
-    "1'; WAITFOR DELAY '0:0:5'--",
+    "1' AND SLEEP(5)-- ",
+    "1'; WAITFOR DELAY '0:0:5'-- ",
 ]
 
 BOOLEAN_PAYLOADS = [
-    ("1' AND 1=1--", "1' AND 1=2--"),
-    ("1' OR 1=1--",  "1' OR 1=2--"),
+    ("1' AND 1=1-- ", "1' AND 1=2-- "),
+    ("1' OR 1=1-- ",  "1' OR 1=2-- "),
 ]
 
 # URLs to skip — destructive or session-breaking pages
@@ -227,26 +227,84 @@ class SQLiInjector:
     def _test_boolean_based(self, ep: dict, param: str) -> dict:
         for true_p, false_p in BOOLEAN_PAYLOADS:
             r_true  = self._send(ep, param, true_p)
-            r_false = self._send(ep, param, false_p)
-            if r_true is None or r_false is None:
+            if r_true is None:
                 continue
-            if self._is_login_page(r_true) or self._is_login_page(r_false):
+            # Control: repeat the SAME true payload. If the page already
+            # changes between identical requests (random banners,
+            # per-request tokens), the boolean signal is untrustworthy —
+            # skip the parameter honestly instead of guessing.
+            r_control = self._send(ep, param, true_p)
+            if r_control is None:
+                continue
+            if self._is_login_page(r_true) or \
+                    self._is_login_page(r_control):
                 if self._reauth():
                     continue
                 return None
-            len_t = len(r_true.text)
-            len_f = len(r_false.text)
-            if len_t == 0:
+            noise = self._boolean_diff(r_true.text, r_control.text)
+            if noise > 0.10:
+                print(f"  [SQLi] Skipping boolean test on {ep['url']} "
+                      f"param='{param}': page too dynamic "
+                      f"(same-payload noise {noise:.0%})")
+                return None
+
+            r_false = self._send(ep, param, false_p)
+            if r_false is None:
                 continue
-            diff = abs(len_t - len_f) / len_t
-            if diff > 0.10:
+            if self._is_login_page(r_false):
+                if self._reauth():
+                    continue
+                return None
+
+            # Symmetric-difference ratio: the share of words that appear
+            # in ONLY one response. Localized content differences (e.g.
+            # "exists in" vs "is MISSING from") are captured even when
+            # the shared page chrome dwarfs the signal in raw terms.
+            signal = self._boolean_diff(r_true.text, r_false.text)
+            if signal > 0.02 and signal > noise + 0.01:
                 print(f"  [SQLi] ✓ Boolean-based: {ep['url']} "
-                      f"param='{param}' diff={diff:.0%}")
+                      f"param='{param}' diff={signal:.0%} "
+                      f"(noise {noise:.0%})")
                 return self._make_finding(
                     ep, param, true_p, "boolean-based",
-                    f"Response size differs {diff:.0%} true vs false"
+                    f"Response content differs {signal:.0%} "
+                    f"true vs false (same-payload noise {noise:.0%})"
                 )
         return None
+
+    def _boolean_diff(self, text1: str, text2: str) -> float:
+        """
+        Symmetric-difference ratio (0.0 identical .. 1.0 totally
+        different) between two responses. Volatile elements (CSRF
+        tokens, session IDs, dates, hidden fields) are stripped before
+        comparing the sets of content words.
+        """
+        import re as _re
+
+        def normalize(text):
+            text = _re.sub(r'user_token["\s]*value="[^"]*"', '', text)
+            text = _re.sub(r'PHPSESSID=[a-z0-9]+', '', text)
+            text = _re.sub(r'\d{4}-\d{2}-\d{2}', '', text)
+            text = _re.sub(r'<input[^>]*type=["\']hidden["\'][^>]*>',
+                           '', text, flags=_re.IGNORECASE)
+            return text.strip()
+
+        n1 = normalize(text1)
+        n2 = normalize(text2)
+
+        if not n1 or not n2:
+            return 1.0 if bool(n1) != bool(n2) else 0.0
+
+        words1 = set(_re.findall(r'[a-z0-9]+', n1.lower()))
+        words2 = set(_re.findall(r'[a-z0-9]+', n2.lower()))
+
+        if not words1 or not words2:
+            return abs(len(n1) - len(n2)) / max(len(n1), 1)
+
+        union = len(words1 | words2)
+        if union == 0:
+            return 0.0
+        return len(words1 ^ words2) / union
 
     # ── Helpers ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
