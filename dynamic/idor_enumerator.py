@@ -224,6 +224,20 @@ class IDOREnumerator:
         if baseline.status_code in (401, 403):
             return None
 
+        # Control: refetch the SAME id. If the page already changes
+        # between identical requests (timestamps, tokens, random
+        # banners), any "different content" signal is untrustworthy —
+        # skip the parameter honestly instead of reporting an IDOR.
+        control = self._send(ep, param, str(base_id))
+        control_noise = 0.0
+        if control is not None and control.status_code == \
+                baseline.status_code:
+            control_noise = self._diff_ratio(baseline.text, control.text)
+        if control_noise > 0.30:
+            print(f"  [IDOR] Skipping {clean_url} param='{param}': "
+                  f"page too dynamic (same-ID noise {control_noise:.0%})")
+            return None
+
         baseline_len = len(baseline.text)
 
         # Try adjacent IDs
@@ -248,55 +262,72 @@ class IDOREnumerator:
 
             # IDOR confirmed if:
             # 1. Response is 200 (not 401/403/404)
-            # 2. Response content is different from baseline
-            #    (meaning different user data was returned)
-            # 3. Response is not empty
+            # 2. Response is not empty
+            # 3. Content differs from baseline by MORE than the
+            #    same-ID control noise (plus a small margin)
             if response.status_code == 200 and \
-               len(response.text) > 100 and \
-               self._content_differs(baseline.text, response.text):
-
-                print(f"  [IDOR] ✓ IDOR detected: {clean_url} "
-                      f"param='{param}' "
-                      f"id={base_id} → id={test_id} returns different content")
-                return self._make_finding(
-                    ep       = ep,
-                    param    = param,
-                    base_id  = base_id,
-                    test_id  = test_id,
-                    evidence = (
-                        f"ID {base_id} returns {baseline_len} bytes, "
-                        f"ID {test_id} returns {len(response.text)} bytes — "
-                        f"different user-specific content accessible "
-                        f"without authorization check"
+               len(response.text) > 100:
+                diff = self._diff_ratio(baseline.text, response.text)
+                if diff > 0.05 and diff > control_noise + 0.05:
+                    print(f"  [IDOR] ✓ IDOR detected: {clean_url} "
+                          f"param='{param}' "
+                          f"id={base_id} → id={test_id} "
+                          f"(diff {diff:.0%} vs noise {control_noise:.0%})")
+                    return self._make_finding(
+                        ep       = ep,
+                        param    = param,
+                        base_id  = base_id,
+                        test_id  = test_id,
+                        evidence = (
+                            f"ID {base_id} returns {baseline_len} bytes, "
+                            f"ID {test_id} returns "
+                            f"{len(response.text)} bytes — different "
+                            f"user-specific content accessible without "
+                            f"authorization check"
+                        )
                     )
-                )
 
         return None
 
-    def _content_differs(self, text1: str, text2: str) -> bool:
+    def _diff_ratio(self, text1: str, text2: str) -> float:
         """
-        Check if two responses contain meaningfully different content.
-        Ignores minor differences like timestamps or CSRF tokens.
+        Content dissimilarity between two responses, 0.0 (identical)
+        to 1.0 (completely different).
+
+        Strips volatile elements (CSRF tokens, session IDs, dates,
+        hidden form fields), then compares the sets of content words
+        (Jaccard dissimilarity). Word-level comparison detects
+        different data even when page length and layout are identical
+        (e.g. "User: Alice" vs "User: Bob").
         """
-        # Remove common dynamic elements before comparing
         def normalize(text):
             # Remove CSRF tokens
             text = re.sub(r'user_token["\s]*value="[^"]*"', '', text)
             # Remove session IDs
             text = re.sub(r'PHPSESSID=[a-z0-9]+', '', text)
-            # Remove timestamps
+            # Remove timestamps and dates
             text = re.sub(r'\d{4}-\d{2}-\d{2}', '', text)
+            # Remove hidden form fields (values are often dynamic)
+            text = re.sub(r'<input[^>]*type=["\']hidden["\'][^>]*>',
+                          '', text, flags=re.IGNORECASE)
             return text.strip()
 
-        t1 = normalize(text1)
-        t2 = normalize(text2)
+        n1 = normalize(text1)
+        n2 = normalize(text2)
 
-        if len(t1) == 0:
-            return False
+        if not n1 or not n2:
+            return 1.0 if bool(n1) != bool(n2) else 0.0
 
-        # Calculate difference ratio
-        diff = abs(len(t1) - len(t2)) / len(t1)
-        return diff > 0.05   # more than 5% difference
+        words1 = set(re.findall(r'[a-z0-9]+', n1.lower()))
+        words2 = set(re.findall(r'[a-z0-9]+', n2.lower()))
+
+        if not words1 or not words2:
+            return abs(len(n1) - len(n2)) / max(len(n1), 1)
+
+        union = len(words1 | words2)
+        if union == 0:
+            return 0.0
+        return 1.0 - (len(words1 & words2) / union)
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
