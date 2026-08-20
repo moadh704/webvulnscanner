@@ -8,6 +8,7 @@ import subprocess
 import json
 import os
 import sys
+import shutil
 from datetime import datetime
 from pathlib import Path
 import html
@@ -177,9 +178,23 @@ with st.sidebar:
 
 
 # ── Build CLI Command ─────────────────────────────────────────────────────────
+def base_command():
+    """Return the CLI command used to run a scan.
+
+    Prefers the installed 'WebVulnScanner' entry point (set up by
+    setup.bat). If it is not on PATH (e.g. the user only installed
+    requirements.txt), falls back to running main.py with the current
+    Python interpreter so the UI works out of the box.
+    """
+    if shutil.which("WebVulnScanner"):
+        return ["WebVulnScanner"]
+    root = os.path.dirname(os.path.abspath(__file__))
+    return [sys.executable, os.path.join(root, "main.py")]
+
+
 def build_command():
     """Build the WebVulnScanner CLI command from UI inputs."""
-    cmd = ["WebVulnScanner"]
+    cmd = base_command()
 
     if target_url:
         cmd.extend(["--url", target_url])

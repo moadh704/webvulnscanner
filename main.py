@@ -15,7 +15,52 @@ import os
 import sys
 import io
 import time
+import shutil
 from urllib.parse import urlparse
+
+
+def _ensure_config() -> None:
+    """
+    Create config.py from config.example.py on first run.
+
+    config.py is gitignored (it holds API keys), so a fresh clone
+    starts without it and `import config` would crash immediately.
+    This runs before the import: if config.py is missing, it is
+    generated from the example, and the project root is added to
+    sys.path so the import resolves no matter where the CLI is
+    invoked from.
+    """
+    root = os.path.dirname(os.path.abspath(__file__))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    if os.path.exists(os.path.join(root, 'config.py')) or \
+       os.path.exists('config.py'):
+        return
+    example = os.path.join(root, 'config.example.py')
+    if not os.path.exists(example):
+        print("[!] Error: neither config.py nor config.example.py found.")
+        sys.exit(1)
+    try:
+        shutil.copyfile(example, os.path.join(root, 'config.py'))
+        print("[!] config.py not found — created from config.example.py")
+        print("    Edit config.py to set AI keys and scan defaults.")
+    except OSError as e:
+        print(f"[!] Error: could not create config.py: {e}")
+        sys.exit(1)
+
+
+_ensure_config()
+
+# Windows consoles often default to cp1252, which cannot encode the
+# Unicode glyphs (✓, ✗, →) used throughout the scanner's output —
+# printing them crashes with UnicodeEncodeError whenever stdout is
+# piped/redirected (CI, log files, the Streamlit UI subprocess).
+# Force UTF-8 with replace-on-error so output is safe everywhere.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, ValueError):
+        pass
 
 import config
 from core.scan_manager import ScanManager
@@ -86,10 +131,12 @@ class PhaseTracker:
         ("📄 Generating Report",   "Writing HTML and JSON reports"),
     ]
 
-    def __init__(self, mode: str, modules: list, use_ai: bool):
+    def __init__(self, mode: str, modules: list, use_ai: bool,
+                 quiet: bool = False):
         self.mode    = mode
         self.modules = modules
         self.use_ai  = use_ai
+        self.quiet   = quiet
         self._rich   = None
         self._task   = None
         self._phase  = 0
@@ -120,6 +167,8 @@ class PhaseTracker:
     def start(self, target_url: str, source_dir: str,
               modules: list, ai_provider: str):
         """Print the scan header."""
+        if self.quiet:
+            return
         if self._has_rich:
             from rich.console import Console
             from rich.panel import Panel
@@ -161,11 +210,18 @@ class PhaseTracker:
         self._phase += 1
         pct = int((self._phase / self._total) * 100)
 
+        if self.quiet:
+            return
         if self._has_rich:
             from rich.console import Console
             c = Console()
             bar_filled = int(pct / 5)
-            bar = "█" * bar_filled + "░" * (20 - bar_filled)
+            if c.is_terminal:
+                bar = "█" * bar_filled + "░" * (20 - bar_filled)
+            else:
+                # stdout is a pipe / file — Unicode block chars can crash
+                # the legacy Windows renderer with UnicodeEncodeError
+                bar = "#" * bar_filled + "-" * (20 - bar_filled)
             c.print(
                 f"  [dim][{self._phase}/{self._total}][/dim]  "
                 f"[cyan]{bar}[/cyan]  [bold]{name}[/bold]"
@@ -188,6 +244,20 @@ class PhaseTracker:
         t2 = sum(1 for f in retained if f.get('finding_type') == 2)
         t3 = sum(1 for f in retained if f.get('finding_type') == 3)
 
+        if self.quiet:
+            print(f"SCAN COMPLETE - {len(retained)} findings")
+            if cr: print(f"  Critical : {cr}")
+            if hi: print(f"  High     : {hi}")
+            if me: print(f"  Medium   : {me}")
+            if lo: print(f"  Low      : {lo}")
+            if dismissed:
+                print(f"  Dismissed (FP): {dismissed}")
+            if paths.get('html'):
+                print(f"  HTML -> {paths['html']}")
+            if paths.get('json'):
+                print(f"  JSON -> {paths['json']}")
+            return
+
         if self._has_rich:
             from rich.console import Console
             from rich.table import Table
@@ -196,6 +266,9 @@ class PhaseTracker:
 
             c = Console()
             c.print()
+
+            ok = "✓" if c.is_terminal else "[OK]"
+            arrow = "→" if c.is_terminal else "->"
 
             t = Table(
                 title="Scan Summary",
@@ -220,13 +293,13 @@ class PhaseTracker:
             if lo: t.add_row("Low",
                               f"[green]{lo}[/]", "Low risk")
             t.add_section()
-            if t1: t.add_row("✓ Verified",
+            if t1: t.add_row(f"{ok} Verified",
                               f"[bold green]{t1}[/]",
                               "Static + Dynamic confirmed")
-            if t2: t.add_row("⚠ Candidate",
+            if t2: t.add_row("Candidate",
                               f"[yellow]{t2}[/]",
                               "Static only, AI reviewed")
-            if t3: t.add_row("◎ Detected",
+            if t3: t.add_row("Detected",
                               f"[cyan]{t3}[/]",
                               "Runtime only")
             if dismissed:
@@ -238,13 +311,15 @@ class PhaseTracker:
             c.print(t)
             c.print()
             if paths.get('html'):
-                c.print(f"  [bold green]✓[/] HTML report → [cyan]{paths['html']}[/]")
+                c.print(f"  [bold green]{ok}[/] HTML report {arrow} "
+                        f"[cyan]{paths['html']}[/]")
             if paths.get('json'):
-                c.print(f"  [bold green]✓[/] JSON report → [cyan]{paths['json']}[/]")
+                c.print(f"  [bold green]{ok}[/] JSON report {arrow} "
+                        f"[cyan]{paths['json']}[/]")
             c.print()
             c.print(
                 Panel.fit(
-                    "[bold green]✓ Scan complete[/bold green]",
+                    f"[bold green]{ok} Scan complete[/bold green]",
                     border_style="green"
                 )
             )
@@ -410,7 +485,8 @@ def main():
     config.QUIET   = args.quiet
     config.VERBOSE = args.verbose
 
-    tracker = PhaseTracker(mode, scan_manager.active_modules(), use_ai)
+    tracker = PhaseTracker(mode, scan_manager.active_modules(),
+                           use_ai, quiet=args.quiet)
     tracker.start(
         target_url = args.url or "",
         source_dir = args.src or "",
