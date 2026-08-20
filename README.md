@@ -4,7 +4,7 @@
 
 ### Hybrid static + dynamic web vulnerability scanner
 
-*Master's graduation project — Automatic detection of web application
+* Automatic detection of web application
 vulnerabilities using a hybrid static-dynamic approach*
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge&logo=semver&logoColor=white)](https://github.com/moadh704/webvulnscanner/releases)
