@@ -113,6 +113,56 @@ class OllamaProvider(AIProvider):
         return self._call(prompt)
 
 
+# ── DeepSeek Provider (OpenAI-compatible, cheap + fast) ──────────────────────
+
+class DeepSeekProvider(AIProvider):
+    """
+    DeepSeek via the OpenAI-compatible endpoint (platform.deepseek.com).
+    Uses the V4 Flash model by default — 1M-token context, pay-as-you-go.
+    No extra dependency: the API speaks plain HTTP JSON (requests).
+    """
+
+    API_URL = "https://api.deepseek.com/chat/completions"
+
+    def __init__(self):
+        self.api_key = config.DEEPSEEK_API_KEY
+        self.model   = config.DEEPSEEK_MODEL
+        if not self.api_key:
+            raise RuntimeError(
+                "DEEPSEEK_API_KEY is empty. "
+                "Get a key at https://platform.deepseek.com/api_keys "
+                "and set it in config.py"
+            )
+
+    def _call(self, prompt: str) -> str:
+        try:
+            import requests
+            r = requests.post(
+                self.API_URL,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type" : "application/json",
+                },
+                json={
+                    "model"    : self.model,
+                    "messages" : [{"role": "user", "content": prompt}],
+                    "max_tokens": 500,
+                },
+                timeout=60
+            )
+            r.raise_for_status()
+            data = r.json()
+            return data["choices"][0]["message"]["content"]
+        except Exception as e:
+            return f"REAL (DeepSeek error: {e})"
+
+    def review_finding(self, prompt: str) -> str:
+        return self._call(prompt)
+
+    def generate_remediation(self, prompt: str) -> str:
+        return self._call(prompt)
+
+
 # ── NoAI Provider (disabled fallback) ────────────────────────────────────────
 
 class NoAIProvider(AIProvider):
@@ -136,10 +186,11 @@ def get_provider() -> AIProvider:
     Defaults to NoAIProvider if provider name is unrecognized.
     """
     registry = {
-        "gemini" : GeminiProvider,
-        "groq"   : GroqProvider,
-        "ollama" : OllamaProvider,
-        "none"   : NoAIProvider,
+        "gemini"   : GeminiProvider,
+        "groq"     : GroqProvider,
+        "deepseek" : DeepSeekProvider,
+        "ollama"   : OllamaProvider,
+        "none"     : NoAIProvider,
     }
     provider_class = registry.get(
         config.AI_PROVIDER.lower(), NoAIProvider

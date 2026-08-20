@@ -395,8 +395,8 @@ def parse_args():
     )
     parser.add_argument(
         "--ai-provider", type=str,
-        choices=["groq", "gemini", "none"], default=None,
-        help="AI provider override\nOptions: groq, gemini, none"
+        choices=["groq", "gemini", "deepseek", "none"], default=None,
+        help="AI provider override\nOptions: groq, gemini, deepseek, none"
     )
     parser.add_argument(
         "--no-ai", action="store_true",

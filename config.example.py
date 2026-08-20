@@ -14,11 +14,14 @@ REQUEST_HEADERS   = {
 }
 
 # ── AI Enhancement Layer ──────────────────────────────────────────────────────
-# Options: "groq" (free, recommended) | "gemini" (free tier) | "none"
+# Options: "groq" (free, recommended) | "gemini" (free tier) | "deepseek" |
+#          "ollama" (local) | "none"
 AI_PROVIDER    = "none"
 
 GEMINI_API_KEY = ""   # free at aistudio.google.com
 GROQ_API_KEY   = ""   # free at console.groq.com
+DEEPSEEK_API_KEY = "" # at platform.deepseek.com
+DEEPSEEK_MODEL   = "deepseek-v4-flash"
 OLLAMA_MODEL   = "codellama"
 OLLAMA_URL     = "http://localhost:11434/api/generate"
 

@@ -15,7 +15,7 @@ vulnerabilities using a hybrid static-dynamic approach*
 [![Last commit](https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/commits/main)
 [![Interface](https://img.shields.io/badge/interface-CLI%20%7C%20Streamlit-8A2BE2?style=flat-square&logo=streamlit&logoColor=white)](#web-ui)
 [![Analysis](https://img.shields.io/badge/analysis-static%20%2B%20dynamic-0ea5e9?style=flat-square)](#how-it-works)
-[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
+[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20DeepSeek%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
 
 **Static analysis** (AST + rules) meets **active dynamic testing** against a
 live target. Built for the common OWASP Top 10 issue classes, with an optional
@@ -164,7 +164,7 @@ WebVulnScanner --url http://localhost/dvwa \
 | `--output-format` | `html` \| `json` \| `both` | `both` |
 | `--username` / `--password` | Login for authenticated scans | — |
 | `--difficulty` | DVWA level: `low`–`impossible` | — |
-| `--ai-provider` | `groq` \| `gemini` \| `none` | config |
+| `--ai-provider` | `groq` \| `gemini` \| `deepseek` \| `none` | config |
 | `--no-ai` | Disable AI layer | AI on if configured |
 | `--timeout` | Request timeout (seconds) | config |
 | `--max-pages` | Crawl limit | config |
@@ -233,15 +233,19 @@ remediation notes:
 |----------|------|-------|
 | **Groq** | Cloud | Fast; free tier available |
 | **Gemini** | Cloud | Free tier available |
+| **DeepSeek** | Cloud | V4 Flash — 1M-token context, pay-as-you-go, OpenAI-compatible |
 | **Ollama** | Local | Runs entirely on your machine |
 
 ```bash
 # Enable a provider
-WebVulnScanner --url http://localhost/dvwa --ai-provider groq
+WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek
 
 # Or disable it
 WebVulnScanner --url http://localhost/dvwa --no-ai
 ```
+
+Set the key in `config.py`: `DEEPSEEK_API_KEY` (get one at
+[platform.deepseek.com](https://platform.deepseek.com/api_keys)).
 
 ## Project layout
 
