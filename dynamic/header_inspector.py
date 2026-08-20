@@ -64,6 +64,14 @@ class HeaderInspector:
 
         print(f"  [Headers] Inspecting headers at: {base_url}")
 
+        # HSTS only has meaning over HTTPS: over plain HTTP a browser
+        # ignores it anyway, so flagging it as missing is noise.
+        checked = dict(SECURITY_HEADERS)
+        if base_url.lower().startswith('http://'):
+            checked.pop('Strict-Transport-Security', None)
+            print("  [Headers] Skipping Strict-Transport-Security "
+                  "(target is HTTP — header meaningless)")
+
         try:
             response = self.session.get(
                 base_url,
@@ -78,7 +86,7 @@ class HeaderInspector:
         missing  = []
         present  = []
 
-        for header, info in SECURITY_HEADERS.items():
+        for header, info in checked.items():
             if header.lower() not in {h.lower()
                                        for h in response.headers}:
                 missing.append((header, info))

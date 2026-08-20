@@ -324,6 +324,13 @@ class Correlator:
         vuln_type    = finding.get('type', 'unknown')
         finding_type = finding.get('finding_type', 3)
 
+        # Header findings carry an intrinsic per-header severity
+        # (Low/Medium/High) that reflects the header's actual risk.
+        # Boosting them based on detection type would inflate e.g.
+        # a missing Referrer-Policy to Critical — cap at intrinsic.
+        if vuln_type == 'headers':
+            return finding
+
         base_severity = CVSS_BASE.get(vuln_type, 'Medium')
         base_idx      = SEVERITY_LEVELS.index(base_severity) \
                         if base_severity in SEVERITY_LEVELS else 1
