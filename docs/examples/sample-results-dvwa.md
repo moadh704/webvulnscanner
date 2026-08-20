@@ -85,6 +85,6 @@ Sample run of the **full hybrid** mode against a local [DVWA](https://github.com
 ## Reproduce
 
 ```bash
-python main.py --url http://localhost/dvwa \
+wvs --url http://localhost/dvwa \
   --src C:\xampp\htdocs\dvwa --mode full --no-ai --difficulty low
 ```

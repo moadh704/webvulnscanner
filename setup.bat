@@ -26,7 +26,7 @@ call venv\Scripts\activate.bat
 pip install -r requirements.txt --quiet --disable-pip-version-check
 
 echo.
-echo [3/3] Installing WebVulnScanner command...
+echo [3/3] Installing wvs command...
 pip install -e . --quiet --disable-pip-version-check
 
 echo.
@@ -39,6 +39,6 @@ echo   Double-click run.bat
 echo.
 echo Or from command line:
 echo   1. venv\Scripts\activate
-echo   2. WebVulnScanner --help
+echo   2. wvs --help
 echo.
 pause

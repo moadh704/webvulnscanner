@@ -21,7 +21,7 @@ setup(
 ],
     entry_points={
         'console_scripts': [
-            'WebVulnScanner=main:main',
+            'wvs=main:main',
         ],
     },
     python_requires='>=3.8',

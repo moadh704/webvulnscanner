@@ -2,12 +2,12 @@
 """
 WebVulnScanner - Hybrid Static and Dynamic Web Vulnerability Analyzer
 Usage:
-    python main.py --url http://target.com
-    python main.py --url http://target.com --src ./source/
-    python main.py --url http://target.com --scan sqli,xss
-    python main.py --url http://target.com --src ./source/ --scan sqli,cmdi
-    python main.py --url http://target.com --no-ai --quiet
-    python main.py --url http://localhost/dvwa --difficulty high   (DVWA only)
+    wvs --url http://target.com
+    wvs --url http://target.com --src ./source/
+    wvs --url http://target.com --scan sqli,xss
+    wvs --url http://target.com --src ./source/ --scan sqli,cmdi
+    wvs --url http://target.com --no-ai --quiet
+    wvs --url http://localhost/dvwa --difficulty high   (DVWA only)
 """
 
 import argparse

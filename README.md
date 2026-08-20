@@ -115,17 +115,17 @@ cd webvulnscanner
 setup.bat                # Windows — installs deps + CLI entry point
 # or manually:
 pip install -r requirements.txt
-pip install -e .         # optional: enables the WebVulnScanner command
+pip install -e .         # optional: enables the wvs command
 ```
 
 **3. Scan**
 
 ```bash
 # Hybrid — analyze source code AND test the live target
-WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
+wvs --url http://localhost/dvwa --src ./dvwa-source/
 
 # Dynamic only — no source code needed
-WebVulnScanner --url http://localhost/mutillidae --mode dynamic
+wvs --url http://localhost/mutillidae --mode dynamic
 ```
 
 Reports are written to `reports/` (HTML + JSON by default).
@@ -134,19 +134,19 @@ Reports are written to `reports/` (HTML + JSON by default).
 
 ```bash
 # Hybrid (source + live target)
-WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
+wvs --url http://localhost/dvwa --src ./dvwa-source/
 
 # Static only — no live requests
-WebVulnScanner --url http://localhost/dvwa --mode static --src ./source-code/
+wvs --url http://localhost/dvwa --mode static --src ./source-code/
 
 # Dynamic only — crawl + inject against a running app
-WebVulnScanner --url http://localhost/dvwa --mode dynamic
+wvs --url http://localhost/dvwa --mode dynamic
 
 # Target specific modules
-WebVulnScanner --url http://localhost/dvwa --scan sqli,xss,cmdi
+wvs --url http://localhost/dvwa --scan sqli,xss,cmdi
 
 # Authenticated scan with a DVWA security level
-WebVulnScanner --url http://localhost/dvwa \
+wvs --url http://localhost/dvwa \
   --username admin --password password --difficulty low
 ```
 
@@ -170,7 +170,7 @@ WebVulnScanner --url http://localhost/dvwa \
 | `--report-name` | Custom report basename | auto |
 | `--verbose` / `--quiet` | Log detail | normal |
 
-Run `WebVulnScanner --help` for the full list.
+Run `wvs --help` for the full list.
 </details>
 
 ## Web UI
@@ -238,11 +238,11 @@ remediation notes:
 
 ```bash
 # Enable a provider
-WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek-flash
-WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek-pro
+wvs --url http://localhost/dvwa --ai-provider deepseek-flash
+wvs --url http://localhost/dvwa --ai-provider deepseek-pro
 
 # Or disable it
-WebVulnScanner --url http://localhost/dvwa --no-ai
+wvs --url http://localhost/dvwa --no-ai
 ```
 
 Set the key in `config.py`: `DEEPSEEK_API_KEY` (get one at
