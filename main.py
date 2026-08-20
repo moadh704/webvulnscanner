@@ -18,6 +18,8 @@ import time
 import shutil
 from urllib.parse import urlparse
 
+__version__ = "1.0.0"
+
 
 def _ensure_config() -> None:
     """
@@ -174,31 +176,49 @@ class PhaseTracker:
             from rich.panel import Panel
             from rich.table import Table
             from rich import box
+            from rich.text import Text
+            from rich.align import Align
 
             c = Console()
             c.print()
-            c.print(
-                Panel.fit(
-                   f"[bold cyan]WebVulnScanner v1.0[/bold cyan]  "
-                   f"[dim]Hybrid Web Vulnerability Scanner[/dim]",
-                    border_style="cyan"
-                )
-            )
-            t = Table(box=box.SIMPLE, show_header=False, padding=(0, 2))
-            t.add_column(style="dim")
+
+            logo_lines = [
+                ("█     ██ ██    ██ ███████ ", "bright_cyan"),
+                ("██   ██  ██   ██  ██      ", "cyan"),
+                ("█ ██ ██  ██ ██ ██ ███████ ", "cyan"),
+                ("█  ██ █  ██ ██ ██      ██ ", "bright_blue"),
+                ("██     ██  ██████  ███████ ", "bright_cyan"),
+            ]
+            tagline = Text("Hybrid Web Vulnerability Scanner", style="dim italic")
+            tagline.append("   v", style="dim")
+            tagline.append(__version__, style="bold green")
+
+            for line, color in logo_lines:
+                c.print(Align.center(Text(line, style=f"bold {color}")))
+            c.print(Align.center(tagline))
+            c.print(Align.center("─" * 44, style="dim"))
+            c.print()
+
+            t = Table(box=box.SIMPLE_HEAVY, show_header=False,
+                      padding=(0, 2), expand=True)
+            t.add_column(style="dim", justify="right", width=14)
             t.add_column(style="bold white")
             if target_url:
-                t.add_row("Target URL",  target_url)
+                t.add_row("Target URL", target_url)
             if source_dir:
-                t.add_row("Source Dir",  source_dir)
-            t.add_row("Mode",        self.mode)
-            t.add_row("Modules",     ", ".join(modules))
-            t.add_row("AI Provider", ai_provider if self.use_ai else "disabled")
-            c.print(t)
+                t.add_row("Source Dir", source_dir)
+            t.add_row("Mode", self.mode)
+            t.add_row("Modules", ", ".join(modules))
+            ai_str = ai_provider if self.use_ai else "disabled"
+            t.add_row("AI Provider",
+                      f"[bold {'green' if self.use_ai else 'red'}]{ai_str}[/]")
+            c.print(Panel(t, border_style="cyan", box=box.ROUNDED,
+                          title="[bold cyan] Scan Configuration [/]",
+                          title_align="left"))
             c.print()
         else:
             print("=" * 60)
-            print("WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner")
+            print("  W V S  —  WebVulnScanner")
             print("=" * 60)
             print(f"  Target  : {target_url or 'N/A'}")
             print(f"  Mode    : {self.mode}")
@@ -341,8 +361,15 @@ class PhaseTracker:
 
 def parse_args():
     parser = argparse.ArgumentParser(
+        prog="wvs",
         description="WebVulnScanner - Hybrid Web Vulnerability Analyzer",
         formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    parser.add_argument(
+        "--version", action="version",
+        version=f"wvs {__version__}",
+        help="Show version and exit"
     )
 
     parser.add_argument(
