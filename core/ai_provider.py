@@ -182,17 +182,19 @@ class DeepSeekProvider(AIProvider):
     def _call(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             import requests
-            # DeepSeek V4 is a reasoning model: it spends output tokens on
-            # `reasoning_content` BEFORE producing `content`. A budget that
-            # fits a non-reasoning model (e.g. 560) can be fully consumed by
-            # reasoning, returning an empty answer. Callers pass generous
-            # budgets for review prompts; this is a safety floor only.
-            max_tokens = max(max_tokens, 800)
+            # DeepSeek V4 defaults to "thinking mode": it spends output
+            # tokens on `reasoning_content` BEFORE producing `content`, so
+            # with a modest max_tokens budget the request finishes with
+            # finish_reason="length" and an EMPTY answer. Our review/remediation
+            # prompts are classification tasks that do not need reasoning, so
+            # we disable thinking: faster, cheaper, and the token budget goes
+            # to the actual answer.
             payload = {
                 "model"     : self.model,
                 "messages"  : [{"role": "user", "content": prompt}],
                 "max_tokens": max_tokens,
                 "temperature": 0,   # deterministic verdicts
+                "thinking"  : {"type": "disabled"},
             }
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
@@ -213,11 +215,12 @@ class DeepSeekProvider(AIProvider):
                     content = data["choices"][0]["message"]["content"]
                     if content and content.strip():
                         return content
-                    # Empty answer: the reasoning model burned the whole
-                    # budget on `reasoning_content`. Bump it and retry.
+                    # Safety net: with thinking disabled an empty answer
+                    # should not happen; retry once with a bigger budget,
+                    # then give up rather than silently keeping the finding.
                     payload["max_tokens"] = min(payload["max_tokens"] * 2,
                                                 8000)
-                    last_err = "empty content (reasoning consumed budget)"
+                    last_err = "empty content"
                     if attempt < 2:
                         continue
                     return "REAL (DeepSeek error: empty response)"
