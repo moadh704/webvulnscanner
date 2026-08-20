@@ -2,7 +2,9 @@
 
 import os
 import json
+import shutil
 import subprocess
+import sys
 
 import config
 
@@ -36,6 +38,7 @@ class StaticScanner:
         self.rules_dir    = os.path.join(
             os.path.dirname(__file__), 'rules'
         )
+        self._semgrep_cmd = None   # resolved lazily by _resolve_semgrep()
 
     # ── Public entry point ─────────────────────────────────────────────────────────────
 
@@ -82,12 +85,80 @@ class StaticScanner:
                     rule_files.append(rule_path)
         return rule_files
 
+    def _resolve_semgrep(self) -> list:
+        """
+        Find a working way to invoke Semgrep.
+        Probes candidates in order and caches the first that responds
+        to --version. Handles installs where the Scripts dir is not on
+        PATH (Windows user-site installs) and broken console wrappers.
+        """
+        if self._semgrep_cmd is not None:
+            return self._semgrep_cmd
+
+        candidates = []
+
+        def _add_script_dir(base_dir):
+            if not base_dir:
+                return
+            for name in ('semgrep', 'pysemgrep'):
+                exe = os.path.join(base_dir, 'Scripts',
+                                   name + ('.exe' if os.name == 'nt'
+                                           else ''))
+                if os.path.isfile(exe):
+                    candidates.append([exe])
+
+        # 1. On PATH (normal installs)
+        for name in ('semgrep', 'pysemgrep'):
+            exe = shutil.which(name)
+            if exe:
+                candidates.append([exe])
+
+        # 2. Scripts dir next to the running interpreter
+        _add_script_dir(os.path.dirname(sys.executable))
+
+        # 3. User-site Scripts dir (pip install --user on Windows)
+        try:
+            import site
+            _add_script_dir(os.path.dirname(site.USER_SITE))
+        except Exception:
+            pass
+
+        # 4. python -m semgrep as last resort (deprecated but may work)
+        candidates.append([sys.executable, '-m', 'semgrep'])
+
+        seen = set()
+        for cmd in candidates:
+            key = tuple(cmd)
+            if key in seen:
+                continue
+            seen.add(key)
+            try:
+                probe = subprocess.run(
+                    cmd + ['--version'],
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                )
+                if probe.returncode == 0 and (probe.stdout or probe.stderr):
+                    self._semgrep_cmd = cmd
+                    return cmd
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+
+        return []
+
     def _run_semgrep(self, source_dir: str,
                      rule_files: list) -> list:
         """Execute Semgrep and return raw findings list."""
+        # Resolve a working Semgrep invocation
+        semgrep = self._resolve_semgrep()
+        if not semgrep:
+            print(f"  [Static] Semgrep not found. "
+                  f"Install with: pip install semgrep")
+            return []
+
         # Build command
-        cmd = [
-            'semgrep',
+        cmd = list(semgrep) + [
             '--json',
             '--no-rewrite-rule-ids',
             '--quiet',
@@ -122,10 +193,6 @@ class StaticScanner:
             return []
         except json.JSONDecodeError:
             print(f"  [Static] Could not parse Semgrep output.")
-            return []
-        except FileNotFoundError:
-            print(f"  [Static] Semgrep not found. "
-                  f"Install with: pip install semgrep")
             return []
         except Exception as e:
             print(f"  [Static] Semgrep execution failed: {e}")
