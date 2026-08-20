@@ -118,15 +118,15 @@ class OllamaProvider(AIProvider):
 class DeepSeekProvider(AIProvider):
     """
     DeepSeek via the OpenAI-compatible endpoint (platform.deepseek.com).
-    Uses the V4 Flash model by default — 1M-token context, pay-as-you-go.
+    Supports both V4 models: Flash (fast/cheap) and Pro (deep reasoning).
     No extra dependency: the API speaks plain HTTP JSON (requests).
     """
 
     API_URL = "https://api.deepseek.com/chat/completions"
 
-    def __init__(self):
+    def __init__(self, model: str = None):
         self.api_key = config.DEEPSEEK_API_KEY
-        self.model   = config.DEEPSEEK_MODEL
+        self.model   = model or config.DEEPSEEK_MODEL
         if not self.api_key:
             raise RuntimeError(
                 "DEEPSEEK_API_KEY is empty. "
@@ -189,6 +189,8 @@ def get_provider() -> AIProvider:
         "gemini"   : GeminiProvider,
         "groq"     : GroqProvider,
         "deepseek" : DeepSeekProvider,
+        "deepseek-flash" : lambda: DeepSeekProvider(model="deepseek-v4-flash"),
+        "deepseek-pro"   : lambda: DeepSeekProvider(model="deepseek-v4-pro"),
         "ollama"   : OllamaProvider,
         "none"     : NoAIProvider,
     }

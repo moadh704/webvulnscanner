@@ -165,7 +165,8 @@ with st.sidebar:
     with st.expander("🔧 Advanced Options"):
         ai_provider = st.selectbox(
             "AI Provider",
-            options=["groq", "gemini", "deepseek", "none"],
+            options=["groq", "gemini", "deepseek-flash", "deepseek-pro",
+                     "none"],
             index=0
         )
         no_ai = st.checkbox("Disable AI layer (faster)", value=False)

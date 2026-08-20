@@ -164,7 +164,7 @@ WebVulnScanner --url http://localhost/dvwa \
 | `--output-format` | `html` \| `json` \| `both` | `both` |
 | `--username` / `--password` | Login for authenticated scans | — |
 | `--difficulty` | DVWA level: `low`–`impossible` | — |
-| `--ai-provider` | `groq` \| `gemini` \| `deepseek` \| `none` | config |
+| `--ai-provider` | `groq` \| `gemini` \| `deepseek` \| `deepseek-flash` \| `deepseek-pro` \| `none` | config |
 | `--no-ai` | Disable AI layer | AI on if configured |
 | `--timeout` | Request timeout (seconds) | config |
 | `--max-pages` | Crawl limit | config |
@@ -233,19 +233,22 @@ remediation notes:
 |----------|------|-------|
 | **Groq** | Cloud | Fast; free tier available |
 | **Gemini** | Cloud | Free tier available |
-| **DeepSeek** | Cloud | V4 Flash — 1M-token context, pay-as-you-go, OpenAI-compatible |
+| **DeepSeek Flash** | Cloud | V4 Flash — fast & cheap, 1M-token context, OpenAI-compatible |
+| **DeepSeek Pro** | Cloud | V4 Pro — deeper reasoning for tricky findings |
 | **Ollama** | Local | Runs entirely on your machine |
 
 ```bash
 # Enable a provider
-WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek
+WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek-flash
+WebVulnScanner --url http://localhost/dvwa --ai-provider deepseek-pro
 
 # Or disable it
 WebVulnScanner --url http://localhost/dvwa --no-ai
 ```
 
 Set the key in `config.py`: `DEEPSEEK_API_KEY` (get one at
-[platform.deepseek.com](https://platform.deepseek.com/api_keys)).
+[platform.deepseek.com](https://platform.deepseek.com/api_keys)). Plain
+`deepseek` uses `DEEPSEEK_MODEL` from config (default `deepseek-v4-flash`).
 
 ## Project layout
 
