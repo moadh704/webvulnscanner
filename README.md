@@ -9,7 +9,7 @@ vulnerabilities using a hybrid static-dynamic approach*
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge&logo=semver&logoColor=white)](https://github.com/moadh704/webvulnscanner/releases)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](#install)
-[![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](#license)
+[![License](https://img.shields.io/badge/license-Personal%20Use-yellow?style=for-the-badge)](#license)
 [![OWASP](https://img.shields.io/badge/OWASP-Top%2010-orange?style=for-the-badge)](#supported-checks)
 
 [![Last commit](https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/commits/main)
@@ -282,7 +282,8 @@ Built as a Master's thesis project:
 
 ## License
 
-[MIT](LICENSE) — free to use, modify, and distribute.
+[Personal Use License](LICENSE) — personal, private, non-commercial use only.
+No commercial use, no redistribution. See the LICENSE file for the full terms.
 
 ---
 
