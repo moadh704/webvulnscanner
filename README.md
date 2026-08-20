@@ -12,9 +12,20 @@ vulnerabilities using a hybrid static-dynamic approach*
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](#license)
 [![OWASP](https://img.shields.io/badge/OWASP-Top%2010-orange?style=for-the-badge)](#supported-checks)
 
+[![Last commit](https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/commits/main)
+[![Interface](https://img.shields.io/badge/interface-CLI%20%7C%20Streamlit-8A2BE2?style=flat-square&logo=streamlit&logoColor=white)](#web-ui)
+[![Analysis](https://img.shields.io/badge/analysis-static%20%2B%20dynamic-0ea5e9?style=flat-square)](#how-it-works)
+[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
+
 **Static analysis** (AST + rules) meets **active dynamic testing** against a
 live target. Built for the common OWASP Top 10 issue classes, with an optional
 AI layer for false-positive review and remediation notes.
+
+---
+
+**Ships with** — [semgrep](https://semgrep.dev) rule engine ·
+[requests](https://requests.readthedocs.io) · [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) ·
+[Streamlit](https://streamlit.io) UI · Zero-cost CLI
 
 </div>
 
@@ -86,22 +97,35 @@ Every finding is labeled so you know *how much evidence* backs it:
 
 | Tier | Label | Meaning |
 |------|-------|---------|
-| **T1** | Verified | Static rule matched **and** the live target confirmed it |
-| **T2** | Candidate | Static rule matched; no live confirmation |
-| **T3** | Detected | Found only by dynamic testing |
+| <span style="color:#3fb950">**T1**</span> | **Verified** | Static rule matched **and** the live target confirmed it |
+| <span style="color:#d29922">**T2**</span> | **Candidate** | Static rule matched; no live confirmation |
+| <span style="color:#8b949e">**T3**</span> | **Detected** | Found only by dynamic testing |
 
 ## Quick start
 
+**1. Get the code**
+
 ```bash
-# Clone + install (Windows)
 git clone https://github.com/moadh704/webvulnscanner.git
 cd webvulnscanner
-setup.bat
+```
 
-# Hybrid scan: analyze source AND test the live target
+**2. Install**
+
+```bash
+setup.bat                # Windows — installs deps + CLI entry point
+# or manually:
+pip install -r requirements.txt
+pip install -e .         # optional: enables the WebVulnScanner command
+```
+
+**3. Scan**
+
+```bash
+# Hybrid — analyze source code AND test the live target
 WebVulnScanner --url http://localhost/dvwa --src ./dvwa-source/
 
-# Dynamic only (no source code available)
+# Dynamic only — no source code needed
 WebVulnScanner --url http://localhost/mutillidae --mode dynamic
 ```
 
@@ -164,9 +188,15 @@ On Windows you can just double-click **`ui.bat`**.
 
 Real output from a full hybrid scan of a **local DVWA lab** (security level: low):
 
+<span style="color:#ff4444">60 findings</span> ·
+<span style="color:#ff4444">13 Critical</span> ·
+<span style="color:#ff8c00">25 High</span> ·
+<span style="color:#ffce00">19 Medium</span> ·
+<span style="color:#58a6ff">3 Low</span>
+
 | Sample | Target | Notes |
 |--------|--------|-------|
-| [HTML report](docs/examples/sample-report-dvwa.html) | `http://localhost/dvwa` | Full interactive report — **60 findings** (13 Critical / 25 High / 19 Medium / 3 Low), no AI |
+| [HTML report](docs/examples/sample-report-dvwa.html) | `http://localhost/dvwa` | Full interactive report with severity charts, no AI |
 | [Results table](docs/examples/sample-results-dvwa.md) | `http://localhost/dvwa` | Readable findings summary from the same run |
 | [JSON](docs/examples/sample-report-dvwa.json) | `http://localhost/dvwa` | Machine-readable, for tooling demos |
 | [bWAPP XSS](docs/examples/sample-report-bwapp-xss.html) | `http://localhost/bWAPP/xss_get.php` | Focused reflected XSS run |
@@ -178,12 +208,12 @@ targets only** — paths sanitized, no production systems involved.
 
 | Issue | OWASP area | Static | Dynamic |
 |-------|------------|:------:|:-------:|
-| SQL injection | A03 – Injection | yes | yes |
-| Reflected XSS | A03 – Injection | yes | yes |
-| Command injection | A03 – Injection | yes | yes |
-| Path traversal | A01 – Broken access | yes | yes |
-| IDOR / broken access control | A01 – Broken access | — | yes |
-| Security misconfiguration | A05 – Misconfiguration | — | yes |
+| SQL injection | A03 – Injection | <span style="color:#3fb950">yes</span> | <span style="color:#3fb950">yes</span> |
+| Reflected XSS | A03 – Injection | <span style="color:#3fb950">yes</span> | <span style="color:#3fb950">yes</span> |
+| Command injection | A03 – Injection | <span style="color:#3fb950">yes</span> | <span style="color:#3fb950">yes</span> |
+| Path traversal | A01 – Broken access | <span style="color:#3fb950">yes</span> | <span style="color:#3fb950">yes</span> |
+| IDOR / broken access control | A01 – Broken access | <span style="color:#8b949e">no</span> | <span style="color:#3fb950">yes</span> |
+| Security misconfiguration | A05 – Misconfiguration | <span style="color:#8b949e">no</span> | <span style="color:#3fb950">yes</span> |
 
 ## Configuration
 
@@ -246,3 +276,12 @@ Built as a Master's thesis project:
 ## License
 
 [MIT](LICENSE) — free to use, modify, and distribute.
+
+---
+
+<div align="center">
+
+*Moadh & Mamon · 2026 — built for the Master's thesis project on hybrid
+static-dynamic web vulnerability detection*
+
+</div>
