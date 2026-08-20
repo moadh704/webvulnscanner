@@ -2,10 +2,9 @@
 
 # WebVulnScanner
 
-### Hybrid static + dynamic web vulnerability scanner
+**Hybrid static + dynamic web vulnerability scanner**
 
-* Automatic detection of web application
-vulnerabilities using a hybrid static-dynamic approach
+*Automatic detection of web application vulnerabilities using a hybrid static-dynamic approach*
 
 [![Version](https://img.shields.io/badge/version-1.0.0-blue?style=for-the-badge&logo=semver&logoColor=white)](https://github.com/moadh704/webvulnscanner/releases)
 [![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)](#install)
@@ -17,11 +16,11 @@ vulnerabilities using a hybrid static-dynamic approach
 [![Analysis](https://img.shields.io/badge/analysis-static%20%2B%20dynamic-0ea5e9?style=flat-square)](#how-it-works)
 [![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20DeepSeek%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
 
+---
+
 **Static analysis** (AST + rules) meets **active dynamic testing** against a
 live target. Built for the common OWASP Top 10 issue classes, with an optional
 AI layer for false-positive review and remediation notes.
-
----
 
 **Ships with** — [semgrep](https://semgrep.dev) rule engine ·
 [requests](https://requests.readthedocs.io) · [BeautifulSoup](https://www.crummy.com/software/BeautifulSoup/) ·
