@@ -1,5 +1,8 @@
 # ── core/ai_provider.py ──────────────────────────────────────────────────────
 
+import hashlib
+import json
+import os
 import re
 
 import config
@@ -53,10 +56,10 @@ class AIProvider:
     Following the Strategy Pattern: swap providers via config.AI_PROVIDER.
     """
 
-    def review_finding(self, prompt: str) -> str:
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         raise NotImplementedError
 
-    def generate_remediation(self, prompt: str) -> str:
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         raise NotImplementedError
 
 
@@ -74,7 +77,7 @@ class GeminiProvider(AIProvider):
             raise RuntimeError(f"Gemini init failed: {e}. "
                                f"Check GEMINI_API_KEY in config.py")
 
-    def review_finding(self, prompt: str) -> str:
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             response = self.client.models.generate_content(
                 model=self.model, contents=prompt
@@ -83,7 +86,7 @@ class GeminiProvider(AIProvider):
         except Exception as e:
             return f"REAL (Gemini error: {e})"
 
-    def generate_remediation(self, prompt: str) -> str:
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             response = self.client.models.generate_content(
                 model=self.model, contents=prompt
@@ -108,22 +111,22 @@ class GroqProvider(AIProvider):
             raise RuntimeError(f"Groq init failed: {e}. "
                                f"Check GROQ_API_KEY in config.py")
 
-    def _call(self, prompt: str) -> str:
+    def _call(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_tokens=max_tokens,
             )
             return response.choices[0].message.content
         except Exception as e:
             return f"See OWASP guidelines for remediation guidance."
 
-    def review_finding(self, prompt: str) -> str:
-        return self._call(prompt)
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
 
-    def generate_remediation(self, prompt: str) -> str:
-        return self._call(prompt)
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
 
 class OllamaProvider(AIProvider):
     """Free local provider via Ollama (offline, no API key required)."""
@@ -148,10 +151,10 @@ class OllamaProvider(AIProvider):
         except Exception as e:
             return f"REAL (Ollama error: {e})"
 
-    def review_finding(self, prompt: str) -> str:
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt)
 
-    def generate_remediation(self, prompt: str) -> str:
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt)
 
 
@@ -176,7 +179,7 @@ class DeepSeekProvider(AIProvider):
                 "and set it in config.py"
             )
 
-    def _call(self, prompt: str) -> str:
+    def _call(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             import requests
             r = requests.post(
@@ -186,9 +189,10 @@ class DeepSeekProvider(AIProvider):
                     "Content-Type" : "application/json",
                 },
                 json={
-                    "model"    : self.model,
-                    "messages" : [{"role": "user", "content": prompt}],
-                    "max_tokens": 500,
+                    "model"     : self.model,
+                    "messages"  : [{"role": "user", "content": prompt}],
+                    "max_tokens": max_tokens,
+                    "temperature": 0,   # deterministic verdicts
                 },
                 timeout=60
             )
@@ -198,11 +202,11 @@ class DeepSeekProvider(AIProvider):
         except Exception as e:
             return f"REAL (DeepSeek error: {e})"
 
-    def review_finding(self, prompt: str) -> str:
-        return self._call(prompt)
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
 
-    def generate_remediation(self, prompt: str) -> str:
-        return self._call(prompt)
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
 
 
 # ── NoAI Provider (disabled fallback) ────────────────────────────────────────
@@ -213,10 +217,10 @@ class NoAIProvider(AIProvider):
     Type 2 findings are retained as warnings without AI review.
     """
 
-    def review_finding(self, prompt: str) -> str:
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return "REAL"   # keep all findings when AI is disabled
 
-    def generate_remediation(self, prompt: str) -> str:
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         return "Refer to OWASP guidelines for remediation: https://owasp.org"
 
 
@@ -279,6 +283,9 @@ class AIEnhancer:
         # Detect scan context: if no target URL is set, we are in static-only
         # mode; otherwise dynamic evidence is (potentially) available.
         self.static_only_mode = not bool(getattr(config, 'TARGET_URL', ''))
+        self.cache      = self._load_cache()
+        self.calls_made = 0
+        self.cache_hits = 0
         print(f"  [AI] Provider: {config.AI_PROVIDER}")
         if self.static_only_mode:
             print(f"  [AI] Mode: static-only (lenient review)")
@@ -296,95 +303,298 @@ class AIEnhancer:
 
         print(f"  [AI] Processing {len(findings)} finding(s)...")
 
-        for i, finding in enumerate(findings):
-            ftype = finding.get('finding_type')
+        # Step 1: Review — Type 2 candidates (static) and Type 3 detections
+        # (dynamic, FP-prone classes only). Batch by vulnerability type;
+        # bounded by AI_MAX_FINDINGS when set.
+        t2 = [f for f in findings if f.get('finding_type') == 2]
+        t3 = [f for f in findings
+              if f.get('finding_type') == 3 and self._needs_dynamic_review(f)]
+        reviewed = set(id(f) for f in self._cap_by_severity(t2 + t3))
+        self._review_static_batch([f for f in t2 if id(f) in reviewed])
+        self._review_dynamic_batch([f for f in t3 if id(f) in reviewed])
 
-            # Step 1a: Review Type 2 (Candidate) — static-only matches
-            if ftype == 2:
-                finding = self._review_static_candidate(finding)
-
-            # Step 1b: Review Type 3 (Detected) — dynamic-only matches
-            # for vulnerability classes prone to runtime false positives.
-            elif ftype == 3 and self._needs_dynamic_review(finding):
-                finding = self._review_dynamic_detection(finding)
-
-            # Step 2: Generate remediation for all retained findings
-            if finding.get('status') != 'dismissed':
+        # Step 2: Remediation — AI text for retained findings that were
+        # reviewed (plus always for Type 1, never reviewed by design).
+        # AI_REMEDIATION=False skips these calls entirely.
+        remediate = bool(getattr(config, 'AI_REMEDIATION', True))
+        for finding in findings:
+            if finding.get('status') == 'dismissed':
+                continue
+            if remediate and (finding.get('finding_type') == 1
+                              or id(finding) in reviewed):
                 finding = self._generate_remediation(finding)
+            else:
+                finding['remediation'] = self._default_remediation(finding)
+
+        self._save_cache()
 
         retained  = sum(1 for f in findings
                         if f.get('status') != 'dismissed')
         dismissed = len(findings) - retained
         print(f"  [AI] Done. {retained} retained, "
               f"{dismissed} dismissed as false positives.")
+        print(f"  [AI] API calls: {self.calls_made} "
+              f"(cache hits: {self.cache_hits})")
 
         return findings
 
-    # ── Type 2 (static candidate) review ──────────────────────────────────────
+    # ── Verdict cache (cross-run, cost saver) ────────────────────────────────
 
-    def _review_static_candidate(self, finding: dict) -> dict:
-        """
-        Ask AI whether a Type 2 (Candidate) finding is real or a false positive.
-        Uses a context-aware prompt: lenient in static-only mode, strict in
-        hybrid mode where the absence of dynamic confirmation is meaningful.
-        """
+    def _cache_path(self) -> str:
+        cache_dir = getattr(config, 'REPORT_OUTPUT_DIR', 'reports')
+        return os.path.join(cache_dir, '.ai_cache.json')
+
+    def _load_cache(self) -> dict:
+        try:
+            with open(self._cache_path(), encoding='utf-8') as fh:
+                return json.load(fh)
+        except Exception:
+            return {}
+
+    def _save_cache(self):
+        try:
+            os.makedirs(os.path.dirname(self._cache_path()), exist_ok=True)
+            with open(self._cache_path(), 'w', encoding='utf-8') as fh:
+                json.dump(self.cache, fh, indent=1)
+        except Exception:
+            pass
+
+    def _cache_key(self, kind: str, finding: dict) -> str:
+        """Fingerprint of what the model is asked — identical findings
+        across re-scans reuse the stored verdict instead of paying again."""
         location = finding.get('url') or finding.get('file', 'unknown')
-        evidence = finding.get('evidence_static') or 'no static evidence'
-        quoted   = _quote_evidence('Evidence', evidence)
+        evidence = (finding.get('evidence_static')
+                    or finding.get('evidence_dynamic') or '')
+        raw = f"{kind}|{finding.get('type')}|{location}|{evidence}"
+        return hashlib.sha1(raw.encode('utf-8')).hexdigest()
 
+    @staticmethod
+    def _batches(items: list, size: int = 8):
+        for i in range(0, len(items), size):
+            yield items[i:i + size]
+
+    @staticmethod
+    def _parse_batch(raw: str) -> dict:
+        """Parse 'Item <N>: <response>' lines into {N: response}."""
+        out = {}
+        for m in re.finditer(
+                r'Item\s*(\d+)\s*:\s*(.+?)(?=Item\s*\d+\s*:|\Z)',
+                raw, re.S | re.I):
+            try:
+                out[int(m.group(1))] = m.group(2).strip()
+            except ValueError:
+                pass
+        return out
+
+    SEV_WEIGHT = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
+
+    def _cap_by_severity(self, findings: list) -> list:
+        """AI_MAX_FINDINGS > 0 limits the review set to the most severe
+        findings — a budget knob for paid APIs."""
+        limit = int(getattr(config, 'AI_MAX_FINDINGS', 0) or 0)
+        if limit <= 0:
+            return findings
+        capped = sorted(
+            findings, key=lambda f: self.SEV_WEIGHT.get(f.get('severity'), 9)
+        )[:limit]
+        return [f for f in findings if f in capped]
+
+    # ── Batch review core ─────────────────────────────────────────────────────
+
+    def _review_batch(self, batch: list, kind: str, vuln_type: str):
+        """
+        One model call per homogeneous batch. Cache-aware; any item the
+        model does not answer falls back to an individual call so nothing
+        is silently skipped.
+        """
+        for i, f in enumerate(batch, 1):
+            f['_batch_idx'] = i
+
+        cached_lines, uncached = {}, []
+        for f in batch:
+            key = self._cache_key(kind, f)
+            f['_cache_key'] = key
+            if key in self.cache:
+                cached_lines[f['_batch_idx']] = self.cache[key]
+                self.cache_hits += 1
+            else:
+                uncached.append(f)
+
+        responses = {}
+        if uncached:
+            if kind == 'static':
+                prompt = self._static_batch_prompt(uncached, vuln_type)
+            else:
+                prompt = self._dynamic_batch_prompt(uncached, vuln_type)
+            raw = self.provider.review_finding(
+                prompt, max_tokens=min(1600, 80 + 60 * len(uncached)))
+            self.calls_made += 1
+            responses = self._parse_batch(raw)
+
+        for f in batch:
+            line = (cached_lines.get(f['_batch_idx'])
+                    or responses.get(f['_batch_idx']))
+            if line is None:
+                # Fallback: ask for this item alone.
+                if kind == 'static':
+                    prompt = self._static_batch_prompt([f], vuln_type)
+                else:
+                    prompt = self._dynamic_batch_prompt([f], vuln_type)
+                line = self.provider.review_finding(prompt, max_tokens=200)
+                self.calls_made += 1
+            if kind == 'static':
+                self._apply_static_verdict(f, line)
+            else:
+                self._apply_dynamic_verdict(f, line)
+            self.cache[f['_cache_key']] = line
+
+    def _review_static_batch(self, findings: list):
+        by_type = {}
+        for f in findings:
+            by_type.setdefault(f.get('type'), []).append(f)
+        for vuln_type, group in by_type.items():
+            for batch in self._batches(group):
+                self._review_batch(batch, 'static', vuln_type)
+
+    def _review_dynamic_batch(self, findings: list):
+        by_type = {}
+        for f in findings:
+            by_type.setdefault(f.get('type'), []).append(f)
+        for vuln_type, group in by_type.items():
+            for batch in self._batches(group):
+                self._review_batch(batch, 'dynamic', vuln_type)
+
+    # ── Prompt builders ───────────────────────────────────────────────────────
+
+    def _static_item_text(self, f: dict) -> str:
+        location = f.get('url') or f.get('file', 'unknown')
+        evidence = _quote_evidence(
+            'Evidence', f.get('evidence_static') or 'no static evidence')
+        return (f"Item {f['_batch_idx']}: {f.get('type')} "
+                f"(OWASP {f.get('owasp', '')})\n"
+                f"Location : {location}\n{evidence}")
+
+    def _static_batch_prompt(self, findings: list, vuln_type: str) -> str:
+        body = "\n\n".join(self._static_item_text(f) for f in findings)
         if self.static_only_mode:
-            prompt = f"""A static code scanner flagged this as a potential \
-{finding['type']} vulnerability (OWASP {finding['owasp']}):
+            return f"""A static code scanner flagged {len(findings)} \
+potential {vuln_type} vulnerabilities for code-review triage:
 
-Location : {location}
-{quoted}
+{body}
 
 This scan is in STATIC-ONLY mode — no runtime confirmation is available.
-Your job is to help the developer triage findings for code review.
-
-Should this finding be RETAINED for review or is it clearly NOT_VULNERABLE?
-Be lenient: when in doubt, retain. Reply with exactly RETAIN or NOT_VULNERABLE
-followed by one sentence explanation.
+For each item decide RETAIN (keep for review) or NOT_VULNERABLE (clearly safe).
+Be lenient: when in doubt, retain.
+Reply with exactly one line per item, format:
+"Item <N>: RETAIN|NOT_VULNERABLE — <one sentence>".
 """
-        else:
-            prompt = f"""A static code scanner flagged this as a potential \
-{finding['type']} vulnerability (OWASP {finding['owasp']}):
+        return f"""A static code scanner flagged {len(findings)} potential \
+{vuln_type} vulnerabilities (OWASP {findings[0].get('owasp', '')}):
 
-Location : {location}
-{quoted}
+{body}
 
 This scan is in HYBRID mode — dynamic injection was attempted at the
-corresponding endpoint but did NOT confirm exploitation.
-
-Is this still a REAL vulnerability (e.g., dynamically reachable but not
-exploited by our payloads) or a FALSE_POSITIVE (e.g., sanitized, dead code,
-or unreachable)?
-
-Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
+corresponding endpoints but did NOT confirm exploitation.
+For each item decide REAL (still a vulnerability, e.g. dynamically reachable
+but not exploited by our payloads) or FALSE_POSITIVE (e.g. sanitized, dead
+code, or unreachable).
+Reply with exactly one line per item, format:
+"Item <N>: REAL|FALSE_POSITIVE — <one sentence>".
 """
-        response = self.provider.review_finding(prompt)
-        upper = response.upper()
 
+    def _dynamic_item_text(self, f: dict) -> str:
+        evidence = _quote_evidence(
+            'Dynamic evidence', f.get('evidence_dynamic') or 'no dynamic evidence')
+        return (f"Item {f['_batch_idx']}:\n"
+                f"URL              : {f.get('url', '?')}\n"
+                f"Parameter        : {f.get('parameter', '?')}\n"
+                f"Injected payload : {f.get('payload', '?')}\n"
+                f"{evidence}")
+
+    def _dynamic_batch_prompt(self, findings: list, vuln_type: str) -> str:
+        body = "\n\n".join(self._dynamic_item_text(f) for f in findings)
+        return f"""A dynamic injector flagged {len(findings)} {vuln_type} \
+vulnerabilities (OWASP {findings[0].get('owasp', '')}):
+
+{body}
+
+{self._dynamic_guidance(vuln_type)}
+
+For each item decide REAL or FALSE_POSITIVE.
+Reply with exactly one line per item, format:
+"Item <N>: REAL|FALSE_POSITIVE — <one sentence>".
+"""
+
+    def _dynamic_guidance(self, vuln: str) -> str:
+        """Tailored per-class guidance to keep batch verdicts focused."""
+        guidance = {
+            'xss': (
+                "An XSS finding is REAL only if the payload appears in the "
+                "response with its special characters intact (e.g., literal "
+                "'<' and '>'). If the payload was reflected but with characters "
+                "HTML-encoded ('&lt;', '&#60;', '&amp;', etc.), the application "
+                "is correctly escaping output and the finding is a "
+                "FALSE_POSITIVE."
+            ),
+            'sqli': (
+                "A SQLi finding is REAL only if the response shows actual "
+                "SQL behaviour (database error, structural change in returned "
+                "rows, or measurable time delay). A generic 500 error or an "
+                "unrelated message echoing the payload is a FALSE_POSITIVE."
+            ),
+            'traversal': (
+                "A path-traversal finding is REAL only if the response "
+                "contains genuine content from outside the application "
+                "directory (e.g., contents of /etc/passwd, win.ini). If the "
+                "response merely echoes the path string or returns the same "
+                "page as legitimate input, it is a FALSE_POSITIVE."
+            ),
+            'cmdi': (
+                "A CMDi finding is REAL only if the response contains output "
+                "that could only come from actual command execution (e.g., "
+                "the literal string 'www-data' from `whoami`, a directory "
+                "listing produced by `dir` or `ls`, the contents of "
+                "/etc/passwd from `cat`, or a measurable time delay from "
+                "`sleep`). If the matched pattern (e.g., 'uid=', 'gid=', "
+                "'/bin/', '/usr/') appears as part of NORMAL HTML content — "
+                "such as a logged-in user banner, a navigation menu item, or "
+                "help text — this is a FALSE_POSITIVE: the command was never "
+                "executed, the pattern just happens to be present."
+            ),
+            'idor': (
+                "An IDOR finding is REAL only if iterating an integer "
+                "identifier returns data that should belong to different "
+                "users / accounts / resources than the authenticated user "
+                "is authorised to see, indicating a missing authorisation "
+                "check. If sequential IDs simply return distinct legitimate "
+                "resources of the same kind (e.g., /api/Products/1 and "
+                "/api/Products/2 both being public product listings), this "
+                "is expected catalogue behaviour and a FALSE_POSITIVE."
+            ),
+        }
+        return guidance.get(vuln, "")
+
+    # ── Verdict application ───────────────────────────────────────────────────
+
+    def _apply_static_verdict(self, finding: dict, response: str):
         if self.static_only_mode:
-            if _verdict_in(response, "NOT_VULNERABLE"):
-                finding['status']  = 'dismissed'
-                finding['ai_note'] = response.strip()
-            else:
-                finding['status']     = 'warning'
-                finding['confidence'] = 0.55
-                finding['ai_note']    = response.strip()
+            dismissed = _verdict_in(response, "NOT_VULNERABLE")
         else:
-            if _verdict_in(response, "FALSE_POSITIVE"):
-                finding['status']  = 'dismissed'
-                finding['ai_note'] = response.strip()
-            else:
-                finding['status']     = 'warning'
-                finding['confidence'] = 0.55
-                finding['ai_note']    = response.strip()
+            dismissed = _verdict_in(response, "FALSE_POSITIVE")
+        if dismissed:
+            finding['status'] = 'dismissed'
+        else:
+            finding['status']     = 'warning'
+            finding['confidence'] = 0.55
+        finding['ai_note'] = response.strip()
 
-        return finding
+    def _apply_dynamic_verdict(self, finding: dict, response: str):
+        if _verdict_in(response, "FALSE_POSITIVE"):
+            finding['status'] = 'dismissed'
+        # Retained — note the AI's reasoning for transparency in the report
+        finding['ai_note'] = response.strip()
 
-    # ── Type 3 (dynamic detection) review ─────────────────────────────────────
+    # ── Type 3 (dynamic detection) review gate ────────────────────────────────
 
     def _needs_dynamic_review(self, finding: dict) -> bool:
         """
@@ -408,99 +618,6 @@ Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
         return finding.get('type') in (
             'xss', 'sqli', 'traversal', 'cmdi', 'idor'
         )
-
-    def _review_dynamic_detection(self, finding: dict) -> dict:
-        """
-        Ask AI whether a Type 3 (Detected) finding represents a real
-        exploitation or whether the dynamic injector misread escaped /
-        encoded output as successful injection.
-        """
-        url      = finding.get('url', '?')
-        param    = finding.get('parameter', '?')
-        payload  = finding.get('payload', '?')
-        evidence = finding.get('evidence_dynamic') or 'no dynamic evidence'
-        quoted   = _quote_evidence('Dynamic evidence', evidence)
-        vuln     = finding.get('type', 'unknown')
-
-        # Tailored guidance per vulnerability class to make the AI's job
-        # focused rather than generic.
-        if vuln == 'xss':
-            extra = (
-                "An XSS finding is REAL only if the payload appears in the "
-                "response with its special characters intact (e.g., literal "
-                "'<' and '>'). If the payload was reflected but with characters "
-                "HTML-encoded ('&lt;', '&#60;', '&amp;', etc.), the application "
-                "is correctly escaping output and the finding is a "
-                "FALSE_POSITIVE."
-            )
-        elif vuln == 'sqli':
-            extra = (
-                "A SQLi finding is REAL only if the response shows actual "
-                "SQL behaviour (database error, structural change in returned "
-                "rows, or measurable time delay). A generic 500 error or an "
-                "unrelated message echoing the payload is a FALSE_POSITIVE."
-            )
-        elif vuln == 'traversal':
-            extra = (
-                "A path-traversal finding is REAL only if the response "
-                "contains genuine content from outside the application "
-                "directory (e.g., contents of /etc/passwd, win.ini). If the "
-                "response merely echoes the path string or returns the same "
-                "page as legitimate input, it is a FALSE_POSITIVE."
-            )
-        elif vuln == 'cmdi':
-            extra = (
-                "A CMDi finding is REAL only if the response contains output "
-                "that could only come from actual command execution (e.g., "
-                "the literal string 'www-data' from `whoami`, a directory "
-                "listing produced by `dir` or `ls`, the contents of "
-                "/etc/passwd from `cat`, or a measurable time delay from "
-                "`sleep`). If the matched pattern (e.g., 'uid=', 'gid=', "
-                "'/bin/', '/usr/') appears as part of NORMAL HTML content — "
-                "such as a logged-in user banner that displays a user's "
-                "uid/gid number for display purposes, a navigation menu "
-                "item that mentions a path, or a help text that references "
-                "a system directory — this is a FALSE_POSITIVE: the command "
-                "was never executed, the pattern just happens to be present "
-                "in the page text."
-            )
-        elif vuln == 'idor':
-            extra = (
-                "An IDOR finding is REAL only if iterating an integer "
-                "identifier returns data that should belong to different "
-                "users / accounts / resources than the authenticated user "
-                "is authorised to see, indicating a missing authorisation "
-                "check. If sequential IDs simply return distinct legitimate "
-                "resources of the same kind (e.g., /api/Products/1 and "
-                "/api/Products/2 both being public product listings), this "
-                "is expected catalogue behaviour and a FALSE_POSITIVE."
-            )
-        else:
-            extra = ""
-
-        prompt = f"""A dynamic injector flagged a {vuln} vulnerability \
-(OWASP {finding.get('owasp', '')}):
-
-URL              : {url}
-Parameter        : {param}
-Injected payload : {payload}
-{quoted}
-
-{extra}
-
-Based on the evidence above, is this a REAL exploitation or a FALSE_POSITIVE?
-Reply with exactly REAL or FALSE_POSITIVE followed by one sentence explanation.
-"""
-        response = self.provider.review_finding(prompt)
-
-        if _verdict_in(response, "FALSE_POSITIVE"):
-            finding['status']  = 'dismissed'
-            finding['ai_note'] = response.strip()
-        else:
-            # Retained — note the AI's reasoning for transparency in the report
-            finding['ai_note'] = response.strip()
-
-        return finding
 
     # ── Remediation generation ────────────────────────────────────────────────
 

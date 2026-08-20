@@ -25,5 +25,11 @@ DEEPSEEK_MODEL   = "deepseek-v4-flash"
 OLLAMA_MODEL   = "codellama"
 OLLAMA_URL     = "http://localhost:11434/api/generate"
 
+# ── AI cost controls ──────────────────────────────────────────────────────────
+AI_REMEDIATION  = True   # generate AI remediation text (extra API calls);
+                         # False = static OWASP text instead
+AI_MAX_FINDINGS = 0      # cap AI-reviewed findings by severity
+                         # (0 = review all; e.g. 20 = top 20 most severe)
+
 # ── Report settings ───────────────────────────────────────────────────────────
 REPORT_OUTPUT_DIR = "reports"
