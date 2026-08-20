@@ -182,23 +182,51 @@ class DeepSeekProvider(AIProvider):
     def _call(self, prompt: str, max_tokens: int = 500) -> str:
         try:
             import requests
-            r = requests.post(
-                self.API_URL,
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type" : "application/json",
-                },
-                json={
-                    "model"     : self.model,
-                    "messages"  : [{"role": "user", "content": prompt}],
-                    "max_tokens": max_tokens,
-                    "temperature": 0,   # deterministic verdicts
-                },
-                timeout=60
-            )
-            r.raise_for_status()
-            data = r.json()
-            return data["choices"][0]["message"]["content"]
+            # DeepSeek V4 is a reasoning model: it spends output tokens on
+            # `reasoning_content` BEFORE producing `content`. A budget that
+            # fits a non-reasoning model (e.g. 560) can be fully consumed by
+            # reasoning, returning an empty answer. Callers pass generous
+            # budgets for review prompts; this is a safety floor only.
+            max_tokens = max(max_tokens, 800)
+            payload = {
+                "model"     : self.model,
+                "messages"  : [{"role": "user", "content": prompt}],
+                "max_tokens": max_tokens,
+                "temperature": 0,   # deterministic verdicts
+            }
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type" : "application/json",
+            }
+            # Transient DNS/connect failures to the API are common on some
+            # networks — retry briefly before giving up so a blip does not
+            # cost us a paid verdict.
+            last_err = None
+            for attempt in range(3):
+                try:
+                    r = requests.post(
+                        self.API_URL, headers=headers, json=payload,
+                        timeout=120,
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    content = data["choices"][0]["message"]["content"]
+                    if content and content.strip():
+                        return content
+                    # Empty answer: the reasoning model burned the whole
+                    # budget on `reasoning_content`. Bump it and retry.
+                    payload["max_tokens"] = min(payload["max_tokens"] * 2,
+                                                8000)
+                    last_err = "empty content (reasoning consumed budget)"
+                    if attempt < 2:
+                        continue
+                    return "REAL (DeepSeek error: empty response)"
+                except Exception as e:
+                    last_err = e
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))
+            return f"REAL (DeepSeek error: {last_err})"
         except Exception as e:
             return f"REAL (DeepSeek error: {e})"
 
@@ -317,11 +345,20 @@ class AIEnhancer:
         # reviewed (plus always for Type 1, never reviewed by design).
         # AI_REMEDIATION=False skips these calls entirely.
         remediate = bool(getattr(config, 'AI_REMEDIATION', True))
+        total_remed = sum(1 for f in findings
+                          if f.get('status') != 'dismissed'
+                          and (remediate and (f.get('finding_type') == 1
+                                              or id(f) in reviewed)))
+        done_remed = 0
         for finding in findings:
             if finding.get('status') == 'dismissed':
                 continue
             if remediate and (finding.get('finding_type') == 1
                               or id(finding) in reviewed):
+                done_remed += 1
+                print(f"  [AI]   remediation {done_remed}/{total_remed}: "
+                      f"{finding.get('type')} @ "
+                      f"{(finding.get('url') or finding.get('file', '?'))[:50]}")
                 finding = self._generate_remediation(finding)
             else:
                 finding['remediation'] = self._default_remediation(finding)
@@ -420,6 +457,9 @@ class AIEnhancer:
             else:
                 uncached.append(f)
 
+        print(f"  [AI]   {kind} batch '{vuln_type}': "
+              f"{len(batch)} item(s), {len(uncached)} to ask "
+              f"({len(cached_lines)} cache hit(s))")
         responses = {}
         if uncached:
             if kind == 'static':
@@ -427,26 +467,33 @@ class AIEnhancer:
             else:
                 prompt = self._dynamic_batch_prompt(uncached, vuln_type)
             raw = self.provider.review_finding(
-                prompt, max_tokens=min(1600, 80 + 60 * len(uncached)))
+                prompt, max_tokens=min(4000, 500 + 350 * len(uncached)))
             self.calls_made += 1
             responses = self._parse_batch(raw)
+            print(f"  [AI]   batch replied {len(responses)}/{len(uncached)} "
+                  f"items (call #{self.calls_made})")
 
         for f in batch:
             line = (cached_lines.get(f['_batch_idx'])
                     or responses.get(f['_batch_idx']))
             if line is None:
                 # Fallback: ask for this item alone.
+                print(f"  [AI]   fallback ask: {f.get('type')} @ "
+                      f"{(f.get('url') or f.get('file', '?'))[:60]}")
                 if kind == 'static':
                     prompt = self._static_batch_prompt([f], vuln_type)
                 else:
                     prompt = self._dynamic_batch_prompt([f], vuln_type)
-                line = self.provider.review_finding(prompt, max_tokens=200)
+                line = self.provider.review_finding(prompt, max_tokens=1500)
                 self.calls_made += 1
             if kind == 'static':
                 self._apply_static_verdict(f, line)
             else:
                 self._apply_dynamic_verdict(f, line)
-            self.cache[f['_cache_key']] = line
+            # Never cache empty or error responses — a transient outage would
+            # otherwise poison every future scan.
+            if line and not line.startswith('REAL (DeepSeek error'):
+                self.cache[f['_cache_key']] = line
 
     def _review_static_batch(self, findings: list):
         by_type = {}
