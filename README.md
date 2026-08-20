@@ -44,6 +44,14 @@ CLI and Streamlit UI. Optional AI step for false-positive review and remediation
 - Rich CLI + Streamlit UI
 - Windows setup scripts (`setup.bat`, `ui.bat`)
 
+## Sample results
+
+Real scan output against a local DVWA lab (security level: low), generated with the current tool:
+
+- [Sample HTML report](docs/examples/sample-report-dvwa.html) — full interactive report
+- [Findings table](docs/examples/sample-results-dvwa.md) — readable summary of the same run
+- More examples in [docs/examples](docs/examples/)
+
 ## Install
 
 Windows:
