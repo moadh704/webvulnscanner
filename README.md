@@ -12,12 +12,6 @@ vulnerabilities using a hybrid static-dynamic approach*
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](#license)
 [![OWASP](https://img.shields.io/badge/OWASP-Top%2010-orange?style=for-the-badge)](#supported-checks)
 
-[![GitHub release](https://img.shields.io/github/v/release/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/releases)
-[![Stars](https://img.shields.io/github/stars/moadh704/webvulnscanner?style=flat-square&logo=github&color=gold)](https://github.com/moadh704/webvulnscanner/stargazers)
-[![Forks](https://img.shields.io/github/forks/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/network/members)
-[![Issues](https://img.shields.io/github/issues/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/issues)
-[![Last commit](https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/commits/main)
-
 **Static analysis** (AST + rules) meets **active dynamic testing** against a
 live target. Built for the common OWASP Top 10 issue classes, with an optional
 AI layer for false-positive review and remediation notes.
