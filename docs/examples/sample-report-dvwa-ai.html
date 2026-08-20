@@ -1,0 +1,2445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebVulnScanner Report</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg:        #0d1117;
+            --surface:   #161b22;
+            --surface2:  #21262d;
+            --surface3:  #30363d;
+            --border:    #30363d;
+            --text:      #e6edf3;
+            --text-muted:#8b949e;
+            --critical:  #ff4444;
+            --high:      #ff8c00;
+            --medium:    #f0c040;
+            --low:       #3fb950;
+            --blue:      #58a6ff;
+            --purple:    #bc8cff;
+            --teal:      #39d353;
+        }
+
+        body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+        /* ── Header ── */
+        .header { background: linear-gradient(135deg, #0d1117, #1a2332); border-bottom: 1px solid var(--border); padding: 30px 40px; }
+        .header h1 { font-size: 26px; font-weight: 700; color: var(--blue); }
+        .header p { color: var(--text-muted); margin-top: 4px; font-size: 14px; }
+        .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 20px; }
+        .meta-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+        .meta-item .label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+        .meta-item .value { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+
+        /* ── Summary ── */
+        .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; padding: 24px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .summary-card { text-align: center; padding: 16px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface2); transition: transform 0.2s, border-color 0.2s; cursor: default; }
+        .summary-card:hover { transform: translateY(-2px); }
+        .summary-card .count { font-size: 32px; font-weight: 700; }
+        .summary-card .label { font-size: 10px; text-transform: uppercase; color: var(--text-muted); margin-top: 4px; letter-spacing: 0.3px; }
+        .card-critical { border-color: var(--critical) !important; color: var(--critical); }
+        .card-high     { border-color: var(--high) !important; color: var(--high); }
+        .card-medium   { border-color: var(--medium) !important; color: var(--medium); }
+        .card-low      { border-color: var(--low) !important; color: var(--low); }
+        .card-total    { border-color: var(--blue) !important; color: var(--blue); }
+        .card-verified { border-color: var(--teal) !important; color: var(--teal); }
+        .card-candidate{ border-color: var(--medium) !important; color: var(--medium); }
+        .card-detected { border-color: var(--blue) !important; color: var(--blue); }
+
+        /* ── Legend ── */
+        .legend-section { padding: 16px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .legend-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; }
+        .legend-grid { display: flex; gap: 24px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: flex-start; gap: 10px; }
+        .legend-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; white-space: nowrap; margin-top: 2px; }
+        .legend-text { font-size: 12px; color: var(--text-muted); max-width: 220px; }
+        .legend-text strong { color: var(--text); }
+
+        /* ── Charts ── */
+        .charts-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 24px 40px; background: var(--surface); border-bottom: 1px solid var(--border); }
+        .chart-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+        .chart-box h3 { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .chart-container { position: relative; height: 200px; }
+
+        /* ── Badges ── */
+        .type-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .type-verified  { background: rgba(57,211,83,0.15);  color: var(--teal);   border: 1px solid rgba(57,211,83,0.3); }
+        .type-candidate { background: rgba(240,192,64,0.15); color: var(--medium); border: 1px solid rgba(240,192,64,0.3); }
+        .type-detected  { background: rgba(88,166,255,0.15); color: var(--blue);   border: 1px solid rgba(88,166,255,0.3); }
+
+        .sev-badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; }
+        .sev-critical { background: rgba(255,68,68,0.2);   color: var(--critical); border: 1px solid rgba(255,68,68,0.4); }
+        .sev-high     { background: rgba(255,140,0,0.2);   color: var(--high);     border: 1px solid rgba(255,140,0,0.4); }
+        .sev-medium   { background: rgba(240,192,64,0.2);  color: var(--medium);   border: 1px solid rgba(240,192,64,0.4); }
+        .sev-low      { background: rgba(63,185,80,0.2);   color: var(--low);      border: 1px solid rgba(63,185,80,0.4); }
+
+        /* ── Confidence bar ── */
+        .confidence-bar { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-muted); }
+        .conf-track { width: 70px; height: 5px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+        .conf-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--low), var(--blue)); }
+
+        /* ── Findings ── */
+        .findings { padding: 24px 40px; }
+        .findings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .findings-header h2 { font-size: 18px; color: var(--text); }
+        .expand-all-btn { background: var(--surface2); color: var(--blue); border: 1px solid var(--blue); padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: background 0.2s; }
+        .expand-all-btn:hover { background: rgba(88,166,255,0.1); }
+
+        .finding-card { background: var(--surface); border-radius: 10px; border-left: 4px solid var(--border); margin-bottom: 10px; border: 1px solid var(--border); border-left: 4px solid; overflow: hidden; transition: border-color 0.2s; }
+        .finding-card.critical { border-left-color: var(--critical); }
+        .finding-card.high     { border-left-color: var(--high); }
+        .finding-card.medium   { border-left-color: var(--medium); }
+        .finding-card.low      { border-left-color: var(--low); }
+
+        .finding-header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: var(--surface2); user-select: none; }
+        .finding-header:hover { background: var(--surface3); }
+        .finding-header h3 { flex: 1; font-size: 13px; color: var(--text); font-weight: 500; }
+        .toggle-icon { font-size: 14px; color: var(--text-muted); transition: transform 0.2s; min-width: 16px; }
+        .finding-card.open .toggle-icon { transform: rotate(180deg); }
+
+        .finding-body { padding: 16px; border-top: 1px solid var(--border); display: none; background: var(--surface); }
+        .finding-card.open .finding-body { display: block; }
+
+        .evidence-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 8px 0; font-family: 'Courier New', monospace; font-size: 12px; color: #79c0ff; white-space: pre-wrap; word-break: break-all; }
+        .remediation-block { background: rgba(63,185,80,0.05); border: 1px solid rgba(63,185,80,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 13px; color: var(--text); }
+        .ai-note-block { background: rgba(240,192,64,0.05); border: 1px solid rgba(240,192,64,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 12px; color: var(--text); }
+
+        .field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
+
+        .dismissed { opacity: 0.4; }
+        .dismissed-banner { color: var(--critical); font-size: 12px; margin-top: 8px; padding: 6px 10px; background: rgba(255,68,68,0.1); border-radius: 4px; }
+
+        /* ── Footer ── */
+        .footer { text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px; border-top: 1px solid var(--border); background: var(--surface); margin-top: 20px; }
+
+        @media (max-width: 768px) { .charts-section { grid-template-columns: 1fr; } .header, .summary, .findings { padding: 16px 20px; } .legend-grid { flex-direction: column; } }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <h1>🔍 WebVulnScanner — Security Report</h1>
+    <p>Hybrid Static + Dynamic Web Vulnerability Analysis</p>
+    <div class="meta-grid">
+        <div class="meta-item"><div class="label">Target URL</div><div class="value">http://localhost/dvwa</div></div>
+        <div class="meta-item"><div class="label">Source Directory</div><div class="value">C:\xampp\htdocs\dvwa</div></div>
+        <div class="meta-item"><div class="label">Scan Date</div><div class="value">2026-08-20 22:11:11</div></div>
+        <div class="meta-item"><div class="label">AI Provider</div><div class="value">deepseek-flash</div></div>
+        <div class="meta-item"><div class="label">Total Findings</div><div class="value">45</div></div>
+    </div>
+</div>
+
+<!-- Summary cards -->
+<div class="summary">
+    <div class="summary-card card-total"><div class="count">45</div><div class="label">Total</div></div>
+    <div class="summary-card card-critical"><div class="count">6</div><div class="label">Critical</div></div>
+    <div class="summary-card card-high"><div class="count">25</div><div class="label">High</div></div>
+    <div class="summary-card card-medium"><div class="count">11</div><div class="label">Medium</div></div>
+    <div class="summary-card card-low"><div class="count">3</div><div class="label">Low</div></div>
+    <div class="summary-card card-verified"><div class="count">5</div><div class="label">Verified</div></div>
+    <div class="summary-card card-candidate"><div class="count">34</div><div class="label">Candidate</div></div>
+    <div class="summary-card card-detected"><div class="count">12</div><div class="label">Detected</div></div>
+</div>
+
+<!-- Legend -->
+<div class="legend-section">
+    <div class="legend-title">Finding Classification</div>
+    <div class="legend-grid">
+        <div class="legend-item">
+            <span class="legend-badge type-verified">Verified</span>
+            <div class="legend-text"><strong>Static + Dynamic confirmed</strong> — Semgrep found suspicious code AND the injector confirmed it is exploitable. Highest confidence (90%+).</div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-badge type-candidate">Candidate</span>
+            <div class="legend-text"><strong>Static only, unconfirmed</strong> — Semgrep flagged suspicious code but the injector could not confirm. Reviewed by AI for false positives (40%).</div>
+        </div>
+        <div class="legend-item">
+            <span class="legend-badge type-detected">Detected</span>
+            <div class="legend-text"><strong>Runtime only</strong> — The dynamic injector triggered a vulnerability at runtime. No source code match available (65%).</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+
+<div class="charts-section">
+    <div class="chart-box">
+        <h3>Findings by Severity</h3>
+        <div class="chart-container"><canvas id="severityChart"></canvas></div>
+    </div>
+    <div class="chart-box">
+        <h3>Findings by Vulnerability Type</h3>
+        <div class="chart-container"><canvas id="typeChart"></canvas></div>
+    </div>
+</div>
+
+
+<!-- Findings -->
+<div class="findings">
+    <div class="findings-header">
+        <h2>Findings (45)</h2>
+        <button class="expand-all-btn" onclick="toggleAll()">Expand All</button>
+    </div>
+
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-1">
+        <div class="finding-header" onclick="toggleCard('card-1')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[SQLI] http://localhost/dvwa/vulnerabilities/sqli/ — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\low.php, Line: 5
+Rule: php-sqli-taint-request
+Pattern: User input from $_REQUEST used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">DB error: &#39;you have an error in your sql syntax&#39;</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&#39;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is caused by directly concatenating user input into a SQL query. **Remediation:** Replace the vulnerable `mysqli_query()` call with a prepared statement using bound parameters, which separates SQL logic from data. Additionally, validate that the `id` parameter is an integer before using it. 
+
+**Code fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT first_name, last_name FROM users WHERE user_id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_REQUEST[&#39;id&#39;]); // &#34;i&#34; enforces integer type
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-2">
+        <div class="finding-header" onclick="toggleCard('card-2')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[SQLI] http://localhost/dvwa/vulnerabilities/sqli_blind/ — <code style="color:#79c0ff;">id</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Response delayed 5.0s (baseline 0.0s, delta 5.0s)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">1&#39; AND SLEEP(5)-- </code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate this SQL injection, replace the vulnerable `mysqli_query()` call with a prepared statement using bound parameters. The `id` parameter must be treated as data, not executable SQL, by using `mysqli_prepare()` and `mysqli_stmt_bind_param()`. 
+
+**Code fix example (low.php):**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-3">
+        <div class="finding-header" onclick="toggleCard('card-3')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/xss_r/ — <code style="color:#79c0ff;">name</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\xss_r\source\low.php, Line: 8
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Reflected XSS in the `name` parameter of `xss_r` allows arbitrary script execution. Fix by encoding output with `htmlspecialchars()` using `ENT_QUOTES` and UTF-8 before echoing user input.
+
+**Code fix (low.php, line 8):**
+```php
+$html .= &#39;&lt;pre&gt;Hello &#39; . htmlspecialchars($_GET[&#39;name&#39;], ENT_QUOTES, &#39;UTF-8&#39;) . &#39;&lt;/pre&gt;&#39;;
+```
+
+Additionally, set the `HttpOnly` flag on session cookies and implement a Content Security Policy to mitigate impact if other injection points exist.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-4">
+        <div class="finding-header" onclick="toggleCard('card-4')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/csp/ — <code style="color:#79c0ff;">include</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\low.php, Line: 14
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability occurs because the `include` parameter is directly concatenated into an HTML buffer without output encoding, allowing reflected XSS. **Remediation:** Sanitize and validate the `include` parameter against a strict whitelist of allowed file names, and encode all output using `htmlspecialchars()` with `ENT_QUOTES` before echoing. 
+
+**Code fix example (low.php, line 14):**
+```php
+$allowed = [&#39;source1.php&#39;, &#39;source2.php&#39;]; // whitelist
+$include = $_GET[&#39;include&#39;] ?? &#39;&#39;;
+if (!in_array($include, $allowed, true)) {
+    $include = &#39;default.php&#39;;
+}
+echo htmlspecialchars($include, ENT_QUOTES, &#39;UTF-8&#39;);
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-5">
+        <div class="finding-header" onclick="toggleCard('card-5')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[CMDI] http://localhost/dvwa/vulnerabilities/exec/ — <code style="color:#79c0ff;">ip</code></h3>
+            
+            <span class="type-badge type-verified">✓ Verified</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:90%"></div></div>
+                <span>90%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\low.php, Line: 5
+Rule: php-cmdi-taint-shell-exec-request
+Pattern: User input from $_REQUEST assigned to variable then concatenated into shell_exec(). This allows OS command injection. Use escapeshellarg().
+Matched code: requires login</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Command output pattern detected: &#39;volume serial&#39;</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">| dir</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate this OS command injection, validate and sanitize the `ip` parameter by allowing only IP addresses or hostnames using a whitelist regex, and use `escapeshellarg()` on the input before passing it to `shell_exec()`. Additionally, avoid shell execution entirely by using PHP functions like `gethostbyname()` or `fsockopen()` for network checks.  
+
+**Code fix example:**  
+```php
+$ip = $_REQUEST[&#39;ip&#39;];
+if (!preg_match(&#39;/^[a-zA-Z0-9\.\-]+$/&#39;, $ip)) {
+    die(&#39;Invalid input&#39;);
+}
+$cmd = escapeshellarg($ip);
+$output = shell_exec(&#34;ping -c 4 &#34; . $cmd);
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card critical" id="card-13">
+        <div class="finding-header" onclick="toggleCard('card-13')">
+            <span class="sev-badge sev-critical">Critical</span>
+            <h3>[CMDI] C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\exec\source\medium.php, Line: 5
+Rule: php-cmdi-taint-shell-exec-request
+Pattern: User input from $_REQUEST assigned to variable then concatenated into shell_exec(). This allows OS command injection. Use escapeshellarg().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The medium.php source directly concatenates $_REQUEST input into shell_exec() with only a basic `&amp;&amp;`/`;` filter that can be bypassed, and the endpoint is dynamically reachable after login.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a command injection in `medium.php` where user input from `$_REQUEST` is concatenated into a `shell_exec()` call without sanitization. To fix this, validate the input against an allowlist of expected commands/arguments and use `escapeshellarg()` on any user-supplied values before passing them to the shell. 
+
+**Code-level fix example:**
+```php
+$target = $_REQUEST[&#39;ip&#39;];
+if (!preg_match(&#39;/^[0-9a-fA-F:\.]+$/&#39;, $target)) {
+    die(&#39;Invalid IP address&#39;);
+}
+$cmd = escapeshellarg($target);
+$output = shell_exec(&#34;ping -c 1 &#34; . $cmd);
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-14">
+        <div class="finding-header" onclick="toggleCard('card-14')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[XSS] http://localhost/dvwa/vulnerabilities/xss_s/ — <code style="color:#79c0ff;">txtName</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Payload reflected unencoded in response body (special characters intact)</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</code></div>
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The payload `&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;` is reflected unencoded with literal `&lt;` and `&gt;` characters intact in the response body, confirming the XSS vulnerability.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">To remediate this stored XSS vulnerability, encode all user-supplied input before reflecting it in the response using context-aware output encoding (e.g., HTML entity encoding for HTML contexts). Additionally, implement a Content Security Policy (CSP) with `script-src &#39;self&#39;` to block inline scripts, and validate/sanitize input on the server side by allowing only expected characters (e.g., alphanumeric for a name field).  
+
+**Code-level fix (PHP example):**  
+```php
+$name = htmlspecialchars($_POST[&#39;txtName&#39;], ENT_QUOTES, &#39;UTF-8&#39;);
+echo &#34;&lt;p&gt;Hello, &#34; . $name . &#34;&lt;/p&gt;&#34;;
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-15">
+        <div class="finding-header" onclick="toggleCard('card-15')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Content-Security-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Content-Security-Policy&#39; is missing. Risk: No XSS mitigation policy — scripts from any source allowed</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-16">
+        <div class="finding-header" onclick="toggleCard('card-16')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 20
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The login.php file directly uses $_POST input in a mysqli_query() without sanitization or prepared statements, and the login endpoint is dynamically reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive: the matched code `requires login` is a comment, not executable SQL, and no dynamic evidence confirms tainted input reaching a query. To remediate, ensure all database interactions use prepared statements with bound parameters, as shown below. Additionally, validate and sanitize all user inputs (e.g., `$_POST[&#39;username&#39;]`) before use, and avoid concatenating variables directly into SQL strings.
+
+```php
+// Instead of: mysqli_query($conn, &#34;SELECT * FROM users WHERE user=&#39;$user&#39;&#34;)
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;username&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-17">
+        <div class="finding-header" onclick="toggleCard('card-17')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\login.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\login.php, Line: 24
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Same as Item 1, another instance of unsanitized $_POST data flowing into a SQL query in the login flow.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive: the matched code `requires login` is a comment, not executable SQL, and no dynamic evidence confirms an actual injection point. To remediate, ensure all database queries use prepared statements with bound parameters, as shown below.  
+
+```php
+// Replace mysqli_query with prepared statement
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND pass = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $_POST[&#39;user&#39;], $_POST[&#39;pass&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-18">
+        <div class="finding-header" onclick="toggleCard('card-18')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\bac\source\medium.php, Line: 17
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The medium.php BAC source uses $_GET input directly in a mysqli_query() without parameterization, and the endpoint is reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection via `$_GET` input passed directly into `mysqli_query()`. Remediate by using prepared statements with bound parameters, and validate/sanitize the input as a defense-in-depth measure.
+
+**Code fix example:**
+```php
+// Replace the vulnerable query with a prepared statement
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user_id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, enforce strict input validation (e.g., `ctype_digit($_GET[&#39;id&#39;])`) before using the value, and ensure the database user has least-privilege permissions.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-19">
+        <div class="finding-header" onclick="toggleCard('card-19')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The high.php brute source uses $_GET input in a SQL query without prepared statements, and the endpoint is accessible.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code `requires login` is a comment, not executable SQL, and no user input flows into a query. However, to harden the file, replace any direct query concatenation with prepared statements. For example, if a query exists, use:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_GET[&#39;user&#39;]);
+$stmt-&gt;execute();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-20">
+        <div class="finding-header" onclick="toggleCard('card-20')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\high.php, Line: 13
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Another instance in high.php where $_GET data is used unsafely in a SQL query, reachable via the brute force page.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability arises because user input from `$_GET` is directly concatenated into a SQL query without sanitization or parameterization. To fix this, replace the vulnerable `mysqli_query()` call with a prepared statement that binds the user-supplied value as a parameter, preventing injection. Additionally, ensure the application uses proper authentication checks (e.g., session validation) before executing any database queries.
+
+```php
+// Vulnerable code (line 13)
+$user = $_GET[&#39;username&#39;];
+$pass = $_GET[&#39;password&#39;];
+$query = &#34;SELECT * FROM users WHERE user=&#39;$user&#39; AND password=&#39;$pass&#39;&#34;;
+$result = mysqli_query($conn, $query);
+
+// Fixed code using prepared statements
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $_GET[&#39;username&#39;], $_GET[&#39;password&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-21">
+        <div class="finding-header" onclick="toggleCard('card-21')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The low.php brute source directly concatenates $_GET input into a mysqli_query(), with no sanitization, and is dynamically reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection in the login check where `$_GET[&#39;login&#39;]` and `$_GET[&#39;password&#39;]` are concatenated directly into a `mysqli_query()`. Replace the vulnerable query with a prepared statement using bound parameters to prevent injection. 
+
+**Fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $_GET[&#39;login&#39;], $_GET[&#39;password&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-22">
+        <div class="finding-header" onclick="toggleCard('card-22')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\low.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Same as Item 6, another unsanitized $_GET usage in low.php for the brute force functionality.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection in the login query where user-supplied `$_GET` parameters are concatenated directly into a `mysqli_query()` call. To fix this, replace the dynamic query with a prepared statement using bound parameters, which separates SQL logic from data. Additionally, validate and sanitize all inputs (e.g., using `filter_input()` or whitelist checks) as a defense-in-depth measure.
+
+**Code-level fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $user, $pass);
+$user = $_GET[&#39;username&#39;];
+$pass = $_GET[&#39;password&#39;];
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-23">
+        <div class="finding-header" onclick="toggleCard('card-23')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The medium.php brute source uses $_GET input in a SQL query without prepared statements, and the endpoint is reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code `requires login` is a comment, not executable SQL, and no user input flows into a query on line 5. To confirm, inspect the actual `medium.php` file for any `$_GET` or `$_POST` values concatenated into `mysqli_query()` calls. If real SQLi exists, replace string concatenation with prepared statements:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $user, $pass);
+$stmt-&gt;execute();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-24">
+        <div class="finding-header" onclick="toggleCard('card-24')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 9
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_GET` input is directly used in a `mysqli_query()` without sanitization or prepared statements, and the brute force login endpoint is reachable, though the payload didn&#39;t trigger a detectable error.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection in the login query where user-supplied `$_GET` parameters are directly concatenated into a `mysqli_query()` call. To fix this, use prepared statements with bound parameters instead of string interpolation. 
+
+**Code fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $user, $pass);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, validate and sanitize all input (e.g., using `filter_input()` or whitelist checks) and ensure the database user has least-privilege permissions.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-25">
+        <div class="finding-header" onclick="toggleCard('card-25')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 8
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input flows into a `mysqli_query()` without parameterization, and the captcha high security page is dynamically reachable, though exploitation wasn&#39;t confirmed.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability arises because user input from `$_POST` is directly concatenated into a SQL query without sanitization or parameterization. Replace the vulnerable `mysqli_query()` call with a prepared statement using bound parameters, and validate/whitelist the expected input (e.g., CAPTCHA answer) before executing the query. Example fix:
+
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE captcha = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;captcha&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-26">
+        <div class="finding-header" onclick="toggleCard('card-26')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\high.php, Line: 9
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Similar to item 2, the second `$_POST` variable is also concatenated into a SQL query without prepared statements, making it injectable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection in `high.php` where user input from `$_POST` is directly used in a `mysqli_query()` call. To fix this, replace the vulnerable query with a prepared statement using bound parameters, which separates SQL logic from data. 
+
+**Code-level fix example:**
+```php
+// Vulnerable code (line 9)
+$result = mysqli_query($conn, &#34;SELECT * FROM users WHERE user=&#39;$_POST[&#39;user&#39;]&#39;&#34;);
+
+// Fixed code using prepared statement
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;user&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, validate and sanitize all input (e.g., using `filter_input()` with appropriate filters) and ensure the database user has least-privilege permissions to minimize potential damage.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-27">
+        <div class="finding-header" onclick="toggleCard('card-27')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 50
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input on line 50 of the low captcha page is used directly in a SQL query with no escaping or prepared statements, and the page is reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability arises because user input from `$_POST` is directly concatenated into a SQL query without sanitization or parameterization. To fix this, replace the vulnerable `mysqli_query()` call with a prepared statement that binds user-supplied values as parameters. 
+
+**Code-level fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND pass = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $_POST[&#39;username&#39;], $_POST[&#39;password&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, ensure the database user has least-privilege permissions and validate/whitelist input types (e.g., `ctype_digit()` for numeric fields) as defense-in-depth.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-28">
+        <div class="finding-header" onclick="toggleCard('card-28')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\low.php, Line: 51
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The second `$_POST` variable on line 51 of the low captcha page is also concatenated into a SQL query, creating a second injection point.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability arises because user input from `$_POST` is directly concatenated into a SQL query without sanitization or parameterization. **Remediation:** Replace the vulnerable `mysqli_query()` call with a prepared statement using bound parameters, and validate/whitelist the expected input format (e.g., CAPTCHA answer) before executing the query. Additionally, enforce least-privilege database permissions and use an allowlist for any dynamic table/column names.
+
+**Code-level fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE captcha = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;captcha&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-29">
+        <div class="finding-header" onclick="toggleCard('card-29')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 51
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input on line 51 of the medium captcha page is used in a `mysqli_query()` without parameterization, and the page is reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection via `$_POST` data flowing into a `mysqli_query()` call without sanitization or parameterization. To fix it, replace the dynamic query construction with a prepared statement using bound parameters. For example, instead of `mysqli_query($conn, &#34;SELECT * FROM users WHERE id = &#34; . $_POST[&#39;id&#39;])`, use:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_POST[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, validate and sanitize all user inputs (e.g., `filter_var($_POST[&#39;id&#39;], FILTER_VALIDATE_INT)`) and ensure the database user has least-privilege permissions.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-30">
+        <div class="finding-header" onclick="toggleCard('card-30')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\captcha\source\medium.php, Line: 52
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The second `$_POST` variable on line 52 of the medium captcha page is also directly used in a SQL query, confirming another injectable sink.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability occurs because user input from `$_POST[&#39;step&#39;]` is directly concatenated into a SQL query without sanitization or parameterization. Replace the vulnerable query with a prepared statement using bound parameters, as shown below:
+
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE user_id = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;step&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, validate that `$_POST[&#39;step&#39;]` contains only expected values (e.g., numeric or whitelisted strings) before using it in any query, and ensure the database user has least-privilege permissions.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-31">
+        <div class="finding-header" onclick="toggleCard('card-31')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php, Line: 5
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_GET` input in the CSRF low page is directly concatenated into a `mysqli_query()` without sanitization, and the endpoint is dynamically accessible.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code is a login check (`requires login`), not a SQL query. However, to harden the CSRF source file, ensure any database interactions use prepared statements. For example, replace any direct variable interpolation in queries with:
+
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);
+$stmt-&gt;execute();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-32">
+        <div class="finding-header" onclick="toggleCard('card-32')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\low.php, Line: 6
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_GET` input is directly used in a `mysqli_query()` without sanitization or prepared statements, and the CSRF low source is reachable via login-required pages.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code is a login check (`requires login`), not a SQL query. However, to harden the CSRF source file, ensure any database interactions use prepared statements.  
+
+**Fix example** (if a query exists in that file):  
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);
+$stmt-&gt;execute();
+```  
+Always validate and sanitize input, and never concatenate user data directly into SQL strings.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-33">
+        <div class="finding-header" onclick="toggleCard('card-33')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php, Line: 7
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_GET` input flows into a `mysqli_query()` without parameterization, and the medium CSRF source is dynamically reachable despite CSRF token checks.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code is a login check, not a SQL query. However, to harden the CSRF source file, ensure all database interactions use prepared statements. For example, replace any string-concatenated query like `mysqli_query($conn, &#34;SELECT * FROM users WHERE id = &#34; . $_GET[&#39;id&#39;])` with:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_GET[&#39;id&#39;]);
+$stmt-&gt;execute();
+```
+
+If no SQL query exists in this file, no code change is required—just confirm the rule’s false positive.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-34">
+        <div class="finding-header" onclick="toggleCard('card-34')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\source\medium.php, Line: 8
+Rule: php-sqli-taint-get
+Pattern: User input from $_GET assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — A second `$_GET`-derived variable is concatenated into a SQL query without escaping, making it injectable even if the first query is protected.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code is a login check (`requires login`), not a SQL query, and no dynamic evidence confirms injection. To remediate any actual SQLi risk in this file, replace all direct `$_GET`/`$_POST` values in `mysqli_query()` with prepared statements. Example fix:
+
+```php
+$stmt = $mysqli-&gt;prepare(&#34;UPDATE users SET password = ? WHERE user_id = ?&#34;);
+$stmt-&gt;bind_param(&#34;si&#34;, $new_pass, $user_id);
+$stmt-&gt;execute();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-35">
+        <div class="finding-header" onclick="toggleCard('card-35')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 12
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input is used directly in a `mysqli_query()` without prepared statements, and the test_credentials endpoint is reachable via POST requests.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a SQL injection via `$_POST` data used directly in `mysqli_query()`. Remediate by using prepared statements with bound parameters, and validate/whitelist input types (e.g., ensure `id` is an integer).  
+
+**Code fix example:**  
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_POST[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-36">
+        <div class="finding-header" onclick="toggleCard('card-36')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 16
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Another `$_POST`-derived variable is concatenated into a SQL query without sanitization, confirming a second injectable parameter in the same file.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability arises because user input from `$_POST` is directly concatenated into a SQL query without parameterization. Replace the dynamic query with a prepared statement using bound parameters, and validate/whitelist the input if it’s used for non-query logic (e.g., login checks). Example fix:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE user = ? AND password = ?&#34;);
+$stmt-&gt;bind_param(&#34;ss&#34;, $_POST[&#39;username&#39;], $_POST[&#39;password&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-37">
+        <div class="finding-header" onclick="toggleCard('card-37')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php, Line: 5
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input is directly embedded in a SQL query in the medium SQLi source, which is reachable and not sanitized.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability exists because user input from `$_POST` is directly concatenated into a SQL query without sanitization or parameterization. Replace the vulnerable query with a prepared statement using bound parameters to prevent injection. For example, change:
+
+```php
+$id = $_POST[&#39;id&#39;];
+$result = mysqli_query($conn, &#34;SELECT * FROM users WHERE id = $id&#34;);
+```
+
+to:
+
+```php
+$stmt = $conn-&gt;prepare(&#34;SELECT * FROM users WHERE id = ?&#34;);
+$stmt-&gt;bind_param(&#34;i&#34;, $_POST[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card high" id="card-38">
+        <div class="finding-header" onclick="toggleCard('card-38')">
+            <span class="sev-badge sev-high">High</span>
+            <h3>[SQLI] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php, Line: 5
+Rule: php-sqli-taint-post
+Pattern: User input from $_POST assigned to variable used in mysqli_query(). Use prepared statements with bound parameters.
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_POST` input is used in a `mysqli_query()` without parameterization in the blind SQLi medium source, making it injectable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is caused by directly concatenating user input from `$_POST` into a SQL query without sanitization or parameterization. **Fix:** Replace the vulnerable `mysqli_query()` call with a prepared statement using bound parameters. 
+
+**Code-level fix example:**
+```php
+$stmt = $mysqli-&gt;prepare(&#34;SELECT first_name, last_name FROM users WHERE user_id = ?&#34;);
+$stmt-&gt;bind_param(&#34;s&#34;, $_POST[&#39;id&#39;]);
+$stmt-&gt;execute();
+$result = $stmt-&gt;get_result();
+```
+
+Additionally, validate and sanitize the input (e.g., `ctype_digit($_POST[&#39;id&#39;])`) to ensure it matches expected data types, and use least-privilege database accounts.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-39">
+        <div class="finding-header" onclick="toggleCard('card-39')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">X-Frame-Options</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;X-Frame-Options&#39; is missing. Risk: Clickjacking attacks — page can be embedded in iframes</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-48">
+        <div class="finding-header" onclick="toggleCard('card-48')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `$_GET` input is directly interpolated into an HTML string without sanitization, and the login requirement does not prevent XSS for authenticated users.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a reflected XSS where the `$_GET` parameter is directly interpolated into an HTML string without sanitization. To fix this, apply `htmlspecialchars()` to any user-supplied data before outputting it into HTML context. 
+
+**Code fix example:**
+```php
+// Instead of: echo &#34;requires login&#34;;
+echo htmlspecialchars($_GET[&#39;login&#39;] ?? &#39;&#39;, ENT_QUOTES, &#39;UTF-8&#39;) . &#34; requires login&#34;;
+```
+
+Additionally, ensure all output is escaped using a consistent function like `htmlspecialchars()` with `ENT_QUOTES` to prevent both single and double quote-based injection attacks.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-49">
+        <div class="finding-header" onclick="toggleCard('card-49')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\brute\source\medium.php, Line: 9
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Same as Item 1, another `$_GET` interpolation into HTML without `htmlspecialchars()`, reachable after login.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a reflected XSS where the `$_GET` parameter is directly interpolated into an HTML string without sanitization. To fix this, apply `htmlspecialchars()` with `ENT_QUOTES` to all user-supplied data before outputting it into HTML context. 
+
+**Code fix example:**
+```php
+// Instead of: echo &#34;requires login&#34;;
+echo htmlspecialchars($_GET[&#39;login&#39;] ?? &#39;&#39;, ENT_QUOTES, &#39;UTF-8&#39;) . &#34; requires login&#34;;
+```
+
+Additionally, ensure all other user inputs (e.g., `$_POST`, `$_COOKIE`) are sanitized the same way, and consider using a templating engine with automatic escaping as a defense-in-depth measure.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-50">
+        <div class="finding-header" onclick="toggleCard('card-50')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\high.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\high.php, Line: 9
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — User input is appended via `.=` into an HTML buffer without sanitization, and the CSP high.php file is reachable in the application.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive: the matched code `requires login` is a static string, not user input, and no dynamic evidence confirms injection. To remediate, ensure all user-controlled data is escaped before concatenation into HTML buffers. If user input were involved, use `htmlspecialchars($var, ENT_QUOTES, &#39;UTF-8&#39;)` before appending, e.g., `$html .= htmlspecialchars($_GET[&#39;param&#39;], ENT_QUOTES, &#39;UTF-8&#39;);`.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-51">
+        <div class="finding-header" onclick="toggleCard('card-51')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\impossible.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\impossible.php, Line: 10
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Even in the &#34;impossible&#34; security level, the code appends unsanitized user input to an HTML buffer, making it vulnerable despite the name.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The static analysis rule flagged a false positive—the matched code `requires login` is a hardcoded string, not user input. No actual XSS vulnerability exists in this file. To prevent future false positives, update the SAST rule to exclude string literals from the `php-xss-concat-assign` pattern, or add a code comment like `// nosemgrep: php-xss-concat-assign` above the line to whitelist it.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-52">
+        <div class="finding-header" onclick="toggleCard('card-52')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csp\source\medium.php, Line: 15
+Rule: php-xss-concat-assign
+Pattern: User input appended into an HTML/echo buffer via .= without sanitization. Use htmlspecialchars($VAR, ENT_QUOTES, &#39;UTF-8&#39;).
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The `.=` concatenation of user input into HTML without escaping is present in medium.php, and the endpoint is dynamically reachable.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code `requires login` is a static string, not user input, so no XSS risk exists. However, to harden the code, ensure any future dynamic content added via `.=` is escaped. For example, if `$userInput` were appended, use:
+
+```php
+$buffer .= htmlspecialchars($userInput, ENT_QUOTES, &#39;UTF-8&#39;);
+```
+
+If no user input is ever concatenated, no fix is required.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-53">
+        <div class="finding-header" onclick="toggleCard('card-53')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 12
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — `$_POST` data is interpolated into HTML without sanitization in test_credentials.php, reflecting unsanitized data to the user.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability occurs because user input from `$_POST` is directly interpolated into an HTML string without sanitization, allowing reflected XSS. **Fix:** Sanitize all output using `htmlspecialchars()` with `ENT_QUOTES` and `UTF-8` encoding before echoing user data. 
+
+**Code fix example:**
+```php
+// Before (vulnerable):
+echo &#34;Welcome, &#34; . $_POST[&#39;username&#39;];
+
+// After (safe):
+echo &#34;Welcome, &#34; . htmlspecialchars($_POST[&#39;username&#39;], ENT_QUOTES, &#39;UTF-8&#39;);
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-54">
+        <div class="finding-header" onclick="toggleCard('card-54')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\csrf\test_credentials.php, Line: 16
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — Another `$_POST` interpolation into HTML without escaping in the same file, confirming a second vulnerable output point.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability occurs because user input from `$_POST` is directly interpolated into an HTML string without sanitization, allowing reflected XSS. Fix this by escaping all output with `htmlspecialchars()` using the `ENT_QUOTES` flag before embedding it in HTML. 
+
+**Code fix example:**
+```php
+// Before (vulnerable):
+echo &#34;requires login: &#34; . $_POST[&#39;username&#39;];
+
+// After (safe):
+echo &#34;requires login: &#34; . htmlspecialchars($_POST[&#39;username&#39;], ENT_QUOTES, &#39;UTF-8&#39;);
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-55">
+        <div class="finding-header" onclick="toggleCard('card-55')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — `$_POST` input is interpolated into HTML without sanitization in sqli medium.php, and the endpoint is reachable after login.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a false positive—the matched code `requires login` is a static string, not user input, and no dynamic evidence confirms actual XSS. However, to harden the code, ensure any `$_POST` data used in HTML output is escaped with `htmlspecialchars()`. 
+
+**Fix example:**
+```php
+&lt;?php
+// Instead of: echo &#34;requires login&#34;;
+echo htmlspecialchars(&#34;requires login&#34;, ENT_QUOTES, &#39;UTF-8&#39;);
+// Or if user input is used elsewhere:
+echo htmlspecialchars($_POST[&#39;user_input&#39;] ?? &#39;&#39;, ENT_QUOTES, &#39;UTF-8&#39;);
+?&gt;
+```</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-56">
+        <div class="finding-header" onclick="toggleCard('card-56')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\low.php, Line: 5
+Rule: php-xss-taint-interpolation-get
+Pattern: User input from $_GET interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The code directly interpolates `$_GET[&#39;id&#39;]` into an HTML string without sanitization, and while the dynamic payload didn&#39;t confirm exploitation, the endpoint is reachable and reflects unsanitized input.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a reflected XSS where `$_GET` data is directly interpolated into HTML without sanitization. To fix this, escape all user input using `htmlspecialchars()` with `ENT_QUOTES` and `UTF-8` encoding before outputting it into the HTML context. 
+
+**Code fix example:**
+```php
+// Instead of: echo &#34;Welcome, &#34; . $_GET[&#39;user&#39;];
+echo &#34;Welcome, &#34; . htmlspecialchars($_GET[&#39;user&#39;], ENT_QUOTES, &#39;UTF-8&#39;);
+```
+
+Additionally, apply the same escaping to any other `$_GET`, `$_POST`, or `$_REQUEST` values used in HTML output, and consider using a templating engine with automatic output encoding as a defense-in-depth measure.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card medium" id="card-57">
+        <div class="finding-header" onclick="toggleCard('card-57')">
+            <span class="sev-badge sev-medium">Medium</span>
+            <h3>[XSS] C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php</h3>
+            
+            <span class="type-badge type-candidate">⚠ Candidate</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:55%"></div></div>
+                <span>55%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Injection</div>
+            
+            <div class="field-label">Static Evidence</div>
+            <div class="evidence-block">File: C:\xampp\htdocs\dvwa\vulnerabilities\sqli_blind\source\medium.php, Line: 5
+Rule: php-xss-taint-interpolation-post
+Pattern: User input from $_POST interpolated into HTML string. This will reflect unsanitized data in the response. Use htmlspecialchars().
+Matched code: requires login</div>
+            
+            
+            
+            <div class="field-label">AI Review Note</div>
+            <div class="ai-note-block">REAL — The code directly interpolates `$_POST[&#39;id&#39;]` into an HTML string without sanitization, and the endpoint is reachable via POST, making it a valid XSS vector despite the failed dynamic test.</div>
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">The vulnerability is a reflected XSS where `$_POST` data is directly interpolated into HTML output without sanitization. To fix this, apply `htmlspecialchars()` with `ENT_QUOTES` and UTF-8 encoding to all user-supplied data before outputting it into HTML context. 
+
+**Code fix example:**
+```php
+// Instead of: echo $_POST[&#39;user_input&#39;];
+echo htmlspecialchars($_POST[&#39;user_input&#39;], ENT_QUOTES, &#39;UTF-8&#39;);
+```
+
+Additionally, ensure all output contexts (HTML attributes, JavaScript, URLs) use context-appropriate encoding, and consider implementing a Content Security Policy (CSP) as a defense-in-depth measure.</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-58">
+        <div class="finding-header" onclick="toggleCard('card-58')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">X-Content-Type-Options</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;X-Content-Type-Options&#39; is missing. Risk: MIME-type sniffing — browser may misinterpret content</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-59">
+        <div class="finding-header" onclick="toggleCard('card-59')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Referrer-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Referrer-Policy&#39; is missing. Risk: URL data leaked to third parties via Referer header</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+    
+    
+    
+    <div class="finding-card low" id="card-60">
+        <div class="finding-header" onclick="toggleCard('card-60')">
+            <span class="sev-badge sev-low">Low</span>
+            <h3>[HEADERS] http://localhost — <code style="color:#79c0ff;">Permissions-Policy</code></h3>
+            
+            <span class="type-badge type-detected">◎ Detected</span>
+            
+            <div class="confidence-bar">
+                <div class="conf-track"><div class="conf-fill" style="width:65%"></div></div>
+                <span>65%</span>
+            </div>
+            <span class="toggle-icon">▼</span>
+        </div>
+        <div class="finding-body">
+            <div class="field-label">OWASP Category</div>
+            <div style="font-size:13px;">A05:2025 - Security Misconfiguration</div>
+            
+            
+            <div class="field-label">Dynamic Evidence</div>
+            <div class="evidence-block">Header &#39;Permissions-Policy&#39; is missing. Risk: No browser feature restrictions defined</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">N/A</code></div>
+            
+            
+            
+            <div class="field-label">Remediation</div>
+            <div class="remediation-block">Configure security headers in your web server or application. See: https://owasp.org/www-project-secure-headers/</div>
+            
+        </div>
+    </div>
+    
+    
+
+    
+</div>
+<div class="footer">Generated by WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner</div>
+<script>
+function toggleCard(id) { document.getElementById(id).classList.toggle('open'); }
+let allExpanded = false;
+function toggleAll() {
+    const cards = document.querySelectorAll('.finding-card');
+    const btn = document.querySelector('.expand-all-btn');
+    allExpanded = !allExpanded;
+    cards.forEach(c => allExpanded ? c.classList.add('open') : c.classList.remove('open'));
+    btn.textContent = allExpanded ? 'Collapse All' : 'Expand All';
+}
+const firstCard = document.querySelector('.finding-card');
+if (firstCard) firstCard.classList.add('open');
+
+
+const severityCounts = {
+    Critical: 6,
+    High: 25,
+    Medium: 11,
+    Low: 3,
+};
+const sevLabels = Object.keys(severityCounts).filter(k => severityCounts[k] > 0);
+const sevData = sevLabels.map(k => severityCounts[k]);
+new Chart(document.getElementById('severityChart'), {
+    type: 'doughnut',
+    data: { labels: sevLabels, datasets: [{ data: sevData, backgroundColor: ['#ff4444','#ff8c00','#f0c040','#3fb950'], borderWidth: 2, borderColor: '#21262d' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#8b949e', font: { size: 11 } } } } }
+});
+const typeCounts = {};
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "CMDI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "CMDI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "SQLI"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "XSS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+(function(){ const t = "HEADERS"; typeCounts[t] = (typeCounts[t] || 0) + 1; })();
+
+new Chart(document.getElementById('typeChart'), {
+    type: 'bar',
+    data: { labels: Object.keys(typeCounts), datasets: [{ data: Object.values(typeCounts), backgroundColor: ['#58a6ff','#bc8cff','#39d353','#ff4444','#ff8c00','#f0c040'], borderRadius: 5 }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8b949e' }, grid: { color: '#30363d' } }, x: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } } } }
+});
+
+</script>
+</body>
+</html>
