@@ -109,6 +109,7 @@ class Correlator:
                 result[key] = dict(df)
 
         # Step 2: For each dynamic finding, find the BEST matching static finding
+        matched_sf_ids = set()   # ids of static findings consumed by a Type 1 upgrade
         for key, df in result.items():
             best_sf    = None
             best_score = 0
@@ -129,29 +130,30 @@ class Correlator:
                 result[key]['confidence']      = 0.90
                 result[key]['evidence_static'] = best_sf.get(
                     'evidence_static', '')
+                matched_sf_ids.add(id(best_sf))
                 print(f"  [Correlator] ↑ Type 1: "
                       f"{df['type']} at {df.get('url','')} "
                       f"(matched: {best_sf.get('file','').split(chr(92))[-1]})")
 
         # Step 3: Add unmatched static findings as Type 2
         for sf in static_findings:
-            # Check if this static finding was used to upgrade a dynamic one
-            matched = False
-            for key, df in result.items():
-                if df.get('finding_type') == 1 and \
-                   df.get('evidence_static') == sf.get('evidence_static'):
-                    matched = True
-                    break
-            if not matched and sf.get('file'):
-                sf_copy = dict(sf)
-                sf_copy['finding_type'] = 2
-                sf_copy['confidence']   = 0.40
-                if not sf_copy.get('url'):
-                    sf_copy['url'] = sf_copy.get('file', 'unknown')
-                s_key = (f"static_{sf.get('file','')}_{sf.get('line',0)}"
-                         f"_{sf.get('type','')}")
-                if s_key not in result:
-                    result[s_key] = sf_copy
+            # Tracked by object identity (id), not by evidence string:
+            # two static findings sharing the same evidence snippet (or
+            # both empty) previously marked ALL of them as consumed,
+            # silently dropping the others from the report.
+            if id(sf) in matched_sf_ids:
+                continue
+            if not sf.get('file'):
+                continue
+            sf_copy = dict(sf)
+            sf_copy['finding_type'] = 2
+            sf_copy['confidence']   = 0.40
+            if not sf_copy.get('url'):
+                sf_copy['url'] = sf_copy.get('file', 'unknown')
+            s_key = (f"static_{sf.get('file','')}_{sf.get('line',0)}"
+                     f"_{sf.get('type','')}")
+            if s_key not in result:
+                result[s_key] = sf_copy
 
         # Step 3: Apply CVSS severity boost
         final = []
