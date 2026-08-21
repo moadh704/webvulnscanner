@@ -183,11 +183,11 @@ class PhaseTracker:
             c.print()
 
             logo_lines = [
-                ("█     ██ ██    ██ ███████ ", "bright_cyan"),
-                ("██   ██  ██   ██  ██      ", "cyan"),
-                ("█ ██ ██  ██ ██ ██ ███████ ", "cyan"),
-                ("█  ██ █  ██ ██ ██      ██ ", "bright_blue"),
-                ("██     ██  ██████  ███████ ", "bright_cyan"),
+                ("██     ██ ██    ██ ███████ ", "bright_cyan"),
+                ("██     ██ ██   ██  ██      ", "cyan"),
+                ("██     ██ ██ ██ ██ ███████ ", "cyan"),
+                ("██  █  ██ ██ ██ ██     ██ ", "bright_blue"),
+                ("██   █ ██ ██████  ███████ ", "bright_cyan"),
             ]
             tagline = Text("Hybrid Web Vulnerability Scanner", style="dim italic")
             tagline.append("   v", style="dim")
