@@ -148,6 +148,13 @@ class CMDiInjector:
 
     def _test_output_based(self, ep: dict, param: str) -> dict:
         """Inject command payloads and look for OS command output."""
+        # Baseline body from a benign request to the same endpoint/param.
+        # Patterns that already appear there (docs, error pages, footer
+        # text) are page content, not proof of command execution. A
+        # pattern counts only when it appears MORE times than in the
+        # baseline, so a real vuln whose output overlaps page content
+        # still registers.
+        baseline_body = self._get_baseline_body(ep, param)
         for payload in OUTPUT_PAYLOADS:
             response = self._send(ep, param, payload)
             if response is None:
@@ -164,7 +171,7 @@ class CMDiInjector:
 
             body = response.text.lower()
             for pattern in CMD_PATTERNS:
-                if pattern.lower() in body:
+                if body.count(pattern) > baseline_body.count(pattern):
                     print(f"  [CMDi] ✓ Output-based CMDi: {ep['url']} "
                           f"param='{param}' payload='{payload}'")
                     return self._make_finding(
@@ -175,6 +182,17 @@ class CMDiInjector:
                         evidence = f"Command output pattern detected: '{pattern}'"
                     )
         return None
+
+    def _get_baseline_body(self, ep: dict, param: str) -> str:
+        """
+        Lowercased body of a benign request to the same endpoint/param,
+        or '' when the endpoint is unreachable / returns a login page.
+        """
+        benign   = ep['params'].get(param) or '1'
+        response = self._send(ep, param, benign)
+        if response is None or self._is_login_page(response):
+            return ''
+        return response.text.lower()
 
     def _test_time_based(self, ep: dict, param: str) -> dict:
         """Inject sleep payloads and measure response delay."""
