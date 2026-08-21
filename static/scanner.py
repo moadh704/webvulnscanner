@@ -138,6 +138,8 @@ class StaticScanner:
                     capture_output=True,
                     text=True,
                     timeout=30,
+                    encoding='utf-8',
+                    errors='replace',
                 )
                 if probe.returncode == 0 and (probe.stdout or probe.stderr):
                     self._semgrep_cmd = cmd
@@ -176,7 +178,9 @@ class StaticScanner:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=120
+                timeout=120,
+                encoding='utf-8',
+                errors='replace',
             )
 
             if result.returncode not in (0, 1):
@@ -301,8 +305,8 @@ class StaticScanner:
         if matched:
             return matched
         # Match spans an empty region (e.g. EOF) — show the closest line.
-        ctx = src_lines[max(start_line - 1, 0)]
-        return ctx.strip() or "(no matched code)"
+        idx = min(max(start_line - 1, 0), total - 1)
+        return src_lines[idx].strip() or "(no matched code)"
 
     def _map_vuln_type(self, check_id: str) -> str:
         """Map Semgrep rule ID to internal vulnerability type."""

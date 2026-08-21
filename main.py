@@ -497,6 +497,10 @@ def determine_mode(args):
         return "static"
     if args.mode == "dynamic":
         return "dynamic"
+    # Default mode (full) with only --src: static-only. With only --url:
+    # dynamic-only. With both: hybrid.
+    if args.src and not args.url:
+        return "static"
     if args.url and args.src:
         return "hybrid"
     return "dynamic-only"

@@ -26,6 +26,19 @@ def _verdict_in(text: str, verdict: str) -> bool:
     return bool(affirmed and not negated)
 
 
+def _is_error_response(text: str) -> bool:
+    """
+    True when a provider response is an error fallback rather than a real
+    verdict — these must never be cached, or a transient outage would
+    poison every future scan. Providers signal failures differently:
+    Gemini/Ollama/DeepSeek use "REAL (... error: ...)", Groq falls back to
+    a generic OWASP string.
+    """
+    head = text[:60].lower()
+    return ('error:' in head or head.startswith('see owasp')
+            or 'error' in head and 'real' in head)
+
+
 # ── Evidence quoting (prompt-injection guard) ─────────────────────────────────
 
 UNTRUSTED_EVIDENCE_WARNING = (
@@ -494,8 +507,11 @@ class AIEnhancer:
             else:
                 self._apply_dynamic_verdict(f, line)
             # Never cache empty or error responses — a transient outage would
-            # otherwise poison every future scan.
-            if line and not line.startswith('REAL (DeepSeek error'):
+            # otherwise poison every future scan. Detect provider error
+            # fallbacks structurally rather than by a single provider's
+            # prefix: Gemini "REAL (Gemini error: ...)", Ollama
+            # "REAL (Ollama error: ...)", Groq "See OWASP guidelines...".
+            if line and not _is_error_response(line):
                 self.cache[f['_cache_key']] = line
 
     def _review_static_batch(self, findings: list):

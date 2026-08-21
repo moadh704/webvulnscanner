@@ -404,7 +404,9 @@ class Crawler:
         parsed = urlparse(effective_url)
         if parsed.query:
             params = parse_qs(parsed.query)
-            self._add_endpoint(effective_url, "GET", {k: v[0] for k, v in params.items()})
+            # _add_endpoint strips the query and folds it into params.
+            self._add_endpoint(effective_url, "GET",
+                               {k: v[0] for k, v in params.items()})
         for form in soup.find_all('form'):
             self._process_form(effective_url, form)
         for tag in soup.find_all('a', href=True):
@@ -646,6 +648,17 @@ class Crawler:
         clean_url = url.split('#')[0]
         if not clean_url:
             return
+        # Strip the query string from the URL and fold its parameters into
+        # the params dict for GET endpoints. Injectors re-attach params via
+        # requests' params= kwarg; keeping the query in the URL produces
+        # ?page=x&page=<payload>, which first-wins frameworks ignore.
+        parsed = urlparse(clean_url)
+        if parsed.query and method == 'GET':
+            query_params = {k: v[0] for k, v in
+                            parse_qs(parsed.query).items()}
+            merged = {**query_params, **params}
+            params = merged
+            clean_url = clean_url.split('?')[0]
         # Final defence: never add a destructive endpoint, even if it
         # bypassed the form-level filter (e.g., GET-with-query-string).
         if self._is_destructive_form(clean_url, params):

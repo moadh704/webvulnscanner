@@ -2,6 +2,7 @@
 
 import os
 import json
+import re
 from datetime import datetime
 
 import config
@@ -28,7 +29,15 @@ class Reporter:
         os.makedirs(self.output_dir, exist_ok=True)
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        prefix    = self.report_name if self.report_name else f"report_{timestamp}"
+        # Sanitize report_name: it becomes a filename, so strip any path
+        # components and characters illegal on Windows to avoid path
+        # traversal (../../etc) or crashes after a full scan.
+        if self.report_name:
+            safe = os.path.basename(self.report_name)
+            safe = re.sub(r'[<>:"|?*]', '_', safe) or None
+        else:
+            safe = None
+        prefix    = safe if safe else f"report_{timestamp}"
         html_path = os.path.join(self.output_dir, f"{prefix}.html")
         json_path = os.path.join(self.output_dir, f"{prefix}.json")
         paths     = {}

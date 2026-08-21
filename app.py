@@ -187,8 +187,8 @@ def base_command():
     requirements.txt), falls back to running main.py with the current
     Python interpreter so the UI works out of the box.
     """
-    if shutil.which("WebVulnScanner"):
-        return ["WebVulnScanner"]
+    if shutil.which("wvs"):
+        return ["wvs"]
     root = os.path.dirname(os.path.abspath(__file__))
     return [sys.executable, os.path.join(root, "main.py")]
 
@@ -295,10 +295,17 @@ if scan_button:
     else:
         cmd, report_name = build_command()
 
-        # Show command being run
-        st.code(" ".join(cmd), language="bash")
+        # Show command being run — mask the password so it never appears
+        # in the browser, screenshots, or Streamlit session replays.
+        display_cmd = list(cmd)
+        if "--password" in display_cmd:
+            idx = display_cmd.index("--password")
+            if idx + 1 < len(display_cmd):
+                display_cmd[idx + 1] = "********"
+        st.code(" ".join(display_cmd), language="bash")
 
-        # Run the scan
+        # Run the scan — no shell=True (list form goes directly to
+        # CreateProcess on Windows, avoiding cmd.exe quoting injection).
         with st.spinner("🔍 Scanning... this may take a few minutes"):
             try:
                 # Set encoding to UTF-8 for Windows to handle Unicode characters
@@ -310,14 +317,13 @@ if scan_button:
                     capture_output=True,
                     text=True,
                     timeout=600,
-                    shell=(os.name == 'nt'),
                     encoding='utf-8',
                     errors='replace',
                     env=env
                 )
 
                 if result.returncode != 0 and "complete" not in (result.stdout or "").lower():
-                    st.error(f"Scan failed:\n```\n{result.stderr}\n```")
+                    st.error(f"Scan failed:\n```\n{(result.stderr or '')[:4000]}\n```")
                 else:
                     st.success("✅ Scan completed!")
 
