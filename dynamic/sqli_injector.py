@@ -91,8 +91,9 @@ class SQLiInjector:
 
         for ep in safe_endpoints:
             for param in ep['params']:
-                # Skip submit buttons
-                if param.lower() in ('submit', 'btnSign', 'btnClear', 'send'):
+                # Skip submit buttons (lowercased — 'btnSign'/'btnClear' in
+                # the target HTML are compared case-insensitively)
+                if param.lower() in ('submit', 'btnsign', 'btnclear', 'send'):
                     continue
                 result = self._test_parameter(ep, param)
                 if result:
