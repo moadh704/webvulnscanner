@@ -694,8 +694,16 @@ class Crawler:
             base_parsed = urlparse(self.base_url)
             if parsed.scheme not in ('http', 'https'):
                 return False
-            if parsed.netloc != self.domain and \
-               not parsed.netloc.endswith('.' + self.domain):
+            # Exact host match by default. The old endswith('.' + domain)
+            # check let the crawler (and every injector fed from its
+            # endpoint list) attack SIBLING subdomains of the authorized
+            # target when any page linked to one — e.g. a target of
+            # app.example.com would happily scan api.example.com.
+            # Subdomain crawling is opt-in via config.ALLOW_SUBDOMAINS.
+            if parsed.netloc != self.domain and not (
+                getattr(config, 'ALLOW_SUBDOMAINS', False)
+                and parsed.netloc.endswith('.' + self.domain)
+            ):
                 return False
             base_path = base_parsed.path.rstrip('/')
             if '.' in base_path.split('/')[-1]:

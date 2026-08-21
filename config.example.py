@@ -13,6 +13,11 @@ REQUEST_HEADERS   = {
     "User-Agent": "WebVulnScanner/1.0 (Academic Security Research)"
 }
 
+# Allow crawling subdomains of the target host (e.g. api.example.com when
+# scanning app.example.com). Off by default — scope is limited to the
+# exact host, so a linked sibling domain is never attacked.
+ALLOW_SUBDOMAINS = False
+
 # ── AI Enhancement Layer ──────────────────────────────────────────────────────
 # Options: "groq" (free, recommended) | "gemini" (free tier) | "deepseek" |
 #          "ollama" (local) | "none"
