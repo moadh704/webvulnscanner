@@ -6,7 +6,9 @@ from bs4 import BeautifulSoup
 import config
 
 # ── Patterns that confirm successful path traversal ───────────────────────────
-TRAVERSAL_PATTERNS = [
+# Tier 1: actual sensitive file contents leaked into the response.
+# Definitive proof the traversal read a file.
+FILE_CONTENT_PATTERNS = [
     # Successful file read - Linux
     "root:x:0:0",
     "root:*:0:0",
@@ -20,14 +22,25 @@ TRAVERSAL_PATTERNS = [
     "for 16-bit app support",
     "[mci extensions]",
     "[drivers]",
-    # PHP file inclusion errors — confirms the param IS passed to include()
-    # even if the file doesn't exist (open_basedir or missing file)
+]
+
+# Tier 2: PHP include() error messages. Weak signal on their own —
+# ordinary PHP apps emit "failed to open stream" / "no such file or
+# directory" on every broken include, even without an injection. They
+# only count when the injected payload is ALSO echoed in the response
+# (the error message usually prints the attempted path), and when the
+# pattern appears more often than in a benign baseline response.
+INCLUDE_ERROR_PATTERNS = [
     "for inclusion (include_path=",
     "failed to open stream",
     "no such file or directory",
     "open_basedir restriction",
     "failed opening required",
 ]
+
+# Fragments present in every traversal payload (raw or URL-encoded),
+# used to verify the payload actually reached the file include.
+PAYLOAD_MARKERS = ('passwd', 'win.ini', 'boot.ini')
 
 # ── Payload sets ──────────────────────────────────────────────────────────────
 TRAVERSAL_PAYLOADS = [
@@ -136,6 +149,11 @@ class TraversalInjector:
 
     def _test_parameter(self, ep: dict, param: str) -> dict:
         """Inject traversal payloads and check for file content patterns."""
+        # Baseline body from a benign request: patterns already present
+        # in it are page content (docs, always-on error blocks), not
+        # evidence. A pattern counts only when it appears MORE times
+        # than in the baseline.
+        baseline_body = self._get_baseline_body(ep, param)
         for payload in TRAVERSAL_PAYLOADS:
             response = self._send(ep, param, payload)
             if response is None:
@@ -151,8 +169,10 @@ class TraversalInjector:
                     return None
 
             body = response.text.lower()
-            for pattern in TRAVERSAL_PATTERNS:
-                if pattern.lower() in body:
+
+            # Tier 1: sensitive file contents leaked — definitive.
+            for pattern in FILE_CONTENT_PATTERNS:
+                if body.count(pattern) > baseline_body.count(pattern):
                     print(f"  [Traversal] ✓ Path Traversal: {ep['url']} "
                           f"param='{param}' payload='{payload}'")
                     return self._make_finding(
@@ -162,7 +182,39 @@ class TraversalInjector:
                         evidence = f"Sensitive file content detected: "
                                    f"'{pattern}'"
                     )
+
+            # Tier 2: include() error — weak alone. Only counts when the
+            # payload is also echoed in the response (error messages
+            # print the attempted path), proving the injection reached
+            # the file include rather than a pre-existing page error.
+            marker = next((m for m in PAYLOAD_MARKERS
+                           if m in payload.lower()), None)
+            if marker and \
+               body.count(marker) > baseline_body.count(marker):
+                for pattern in INCLUDE_ERROR_PATTERNS:
+                    if body.count(pattern) > baseline_body.count(pattern):
+                        print(f"  [Traversal] ✓ Path Traversal: "
+                              f"{ep['url']} param='{param}' "
+                              f"payload='{payload}'")
+                        return self._make_finding(
+                            ep       = ep,
+                            param    = param,
+                            payload  = payload,
+                            evidence = f"Include error with injected path "
+                                       f"'{pattern}'"
+                        )
         return None
+
+    def _get_baseline_body(self, ep: dict, param: str) -> str:
+        """
+        Lowercased body of a benign request to the same endpoint/param,
+        or '' when the endpoint is unreachable / returns a login page.
+        """
+        benign   = ep['params'].get(param) or '1'
+        response = self._send(ep, param, benign)
+        if response is None or self._is_login_page(response):
+            return ''
+        return response.text.lower()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
