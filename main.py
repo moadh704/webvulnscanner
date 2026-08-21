@@ -318,7 +318,8 @@ class PhaseTracker:
                               "Static + Dynamic confirmed")
             if t2: t.add_row("Candidate",
                               f"[yellow]{t2}[/]",
-                              "Static only, AI reviewed")
+                              "Static only, AI reviewed" if self.use_ai
+                              else "Static only")
             if t3: t.add_row("Detected",
                               f"[cyan]{t3}[/]",
                               "Runtime only")
