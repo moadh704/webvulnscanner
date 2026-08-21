@@ -677,6 +677,9 @@ Reply with exactly one line per item, format:
             'Static evidence', finding.get('evidence_static', 'N/A'))
         dynamic_ev = _quote_evidence(
             'Dynamic evidence', finding.get('evidence_dynamic', 'N/A'))
+        verdict = (finding.get('ai_note') or '').strip()
+        if verdict:
+            verdict = f"Reviewer verdict: {verdict}\n"
         prompt = f"""A {finding['type']} vulnerability (OWASP {finding['owasp']}) \
 was detected with the following evidence:
 
@@ -688,6 +691,10 @@ Confidence     : {finding.get('confidence', 0)} \
 ({finding.get('finding_type', 3)} — \
 {'confirmed' if finding.get('finding_type') == 1 else 'unconfirmed'})
 
+The finding has already been confirmed as a real vulnerability (REAL)
+by an automated reviewer — do not re-evaluate whether it is a false
+positive; assume it is real and provide the fix.
+{verdict}
 Provide a specific remediation in 3 sentences maximum.
 Include a concrete code-level fix example if applicable.
 """

@@ -215,7 +215,13 @@ class StaticScanner:
                 vuln_type  = self._map_vuln_type(check_id)
                 file_path  = r.get('path', '')
                 line       = r.get('start', {}).get('line', 0)
-                code       = r.get('extra', {}).get('lines', '').strip()
+                end_line   = r.get('end', {}).get('line', line)
+                # `extra.lines` from Semgrep is unreliable (some builds
+                # return a "requires login" placeholder instead of the
+                # matched code). Read the matched region straight from
+                # the source file — the reported line numbers ARE correct.
+                code       = self._read_matched_code(file_path, line,
+                                                     end_line)
                 message    = r.get('extra', {}).get('message', '').strip()
                 metadata   = r.get('extra', {}).get('metadata', {})
                 owasp      = metadata.get('owasp',
@@ -239,7 +245,7 @@ class StaticScanner:
                     f"File: {file_path}, Line: {line}\n"
                     f"Rule: {check_id}\n"
                     f"Pattern: {message}\n"
-                    f"Matched code: {code}"
+                    f"Code context:\n{code}"
                 )
 
                 findings.append({
@@ -264,6 +270,39 @@ class StaticScanner:
                 continue
 
         return findings
+
+    def _read_matched_code(self, file_path: str, start_line: int,
+                           end_line: int, context: int = 8) -> str:
+        """
+        Read the matched source region straight from the target file,
+        with surrounding context so sanitization before/after the match
+        is visible to the AI reviewer.
+
+        Semgrep's `extra.lines` field is unreliable (some community
+        builds return a "requires login" watermark instead of the
+        matched code), while the reported start/end line numbers are
+        accurate. Falls back to a window around the match line if the
+        match region is empty, and never returns the watermark.
+        """
+        try:
+            with open(file_path, 'r',
+                      encoding='utf-8', errors='replace') as f:
+                src_lines = f.read().splitlines()
+        except OSError:
+            return "(unreadable source file)"
+        if not src_lines:
+            return "(empty source file)"
+        total = len(src_lines)
+        # Expand the match region by `context` lines on both sides so
+        # the reviewer can see escaping/validation applied downstream.
+        start = max(start_line - 1 - context, 0)
+        end   = min(end_line + context, total)
+        matched = "\n".join(src_lines[start:end]).strip()
+        if matched:
+            return matched
+        # Match spans an empty region (e.g. EOF) — show the closest line.
+        ctx = src_lines[max(start_line - 1, 0)]
+        return ctx.strip() or "(no matched code)"
 
     def _map_vuln_type(self, check_id: str) -> str:
         """Map Semgrep rule ID to internal vulnerability type."""
