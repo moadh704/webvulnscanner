@@ -182,21 +182,22 @@ class PhaseTracker:
             c = Console()
             c.print()
 
-            logo_lines = [
-                ("██     ██ ██    ██ ███████ ", "bright_cyan"),
-                ("██     ██ ██   ██  ██      ", "cyan"),
-                ("██     ██ ██ ██ ██ ███████ ", "cyan"),
-                ("██  █  ██ ██ ██ ██     ██ ", "bright_blue"),
-                ("██   █ ██ ██████  ███████ ", "bright_cyan"),
-            ]
-            tagline = Text("Hybrid Web Vulnerability Scanner", style="dim italic")
-            tagline.append("   v", style="dim")
-            tagline.append(__version__, style="bold green")
+            wordmark = Text()
+            wordmark.append("W", style="bold bright_cyan")
+            wordmark.append("V", style="bold cyan")
+            wordmark.append("S", style="bold bright_blue")
+            wordmark.append("   v", style="dim")
+            wordmark.append(__version__, style="bold green")
+            tagline = Text(" Hybrid Web Vulnerability Scanner",
+                           style="dim italic")
 
-            for line, color in logo_lines:
-                c.print(Align.center(Text(line, style=f"bold {color}")))
-            c.print(Align.center(tagline))
-            c.print(Align.center("─" * 44, style="dim"))
+            banner = Panel(
+                Align.center(Text.assemble(wordmark, "\n", tagline)),
+                box=box.ROUNDED,
+                border_style="cyan",
+                padding=(0, 2),
+            )
+            c.print(Align.center(banner))
             c.print()
 
             t = Table(box=box.SIMPLE_HEAVY, show_header=False,
@@ -218,7 +219,7 @@ class PhaseTracker:
             c.print()
         else:
             print("=" * 60)
-            print("  W V S  —  WebVulnScanner")
+            print(f"  WVS v{__version__} - Hybrid Web Vulnerability Scanner")
             print("=" * 60)
             print(f"  Target  : {target_url or 'N/A'}")
             print(f"  Mode    : {self.mode}")
