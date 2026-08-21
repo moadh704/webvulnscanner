@@ -119,6 +119,25 @@ class IDOREnumerator:
                         r1 = self.session.get(
                             id_url, timeout=config.REQUEST_TIMEOUT
                         )
+                        # Control: refetch the SAME id. If the page
+                        # already changes between identical requests
+                        # (timestamps, nonces, random banners), any
+                        # cross-ID difference is noise — skip honestly
+                        # instead of reporting a fabricated IDOR.
+                        control = self.session.get(
+                            id_url, timeout=config.REQUEST_TIMEOUT
+                        )
+                        control_noise = 0.0
+                        if control is not None and \
+                           control.status_code == r1.status_code:
+                            control_noise = self._diff_ratio(
+                                r1.text, control.text)
+                        if control_noise > 0.30:
+                            print(f"  [IDOR] Skipping {id_url}: "
+                                  f"page too dynamic (same-ID noise "
+                                  f"{control_noise:.0%})")
+                            continue
+
                         r2 = self.session.get(
                             f"{url}/{id_val + 1}",
                             timeout=config.REQUEST_TIMEOUT
@@ -126,7 +145,8 @@ class IDOREnumerator:
                         if r1.status_code == 200 and \
                            r2.status_code == 200 and \
                            len(r1.text) > 50 and \
-                           r1.text != r2.text:
+                           self._diff_ratio(r1.text, r2.text) > \
+                           control_noise + 0.05:
                             print(f"  [IDOR] ✓ IDOR detected: {id_url} "
                                   f"returns different content for "
                                   f"id={id_val} vs id={id_val + 1}")
