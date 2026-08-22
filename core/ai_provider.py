@@ -361,17 +361,31 @@ class AIEnhancer:
         # reviewed (plus always for Type 1, never reviewed by design).
         # AI_REMEDIATION=False skips these calls entirely.
         remediate = bool(getattr(config, 'AI_REMEDIATION', True))
+        max_remediations = int(
+            getattr(config, 'AI_MAX_REMEDIATIONS', 0) or 0
+        )
         total_remed = sum(1 for f in findings
                           if f.get('status') != 'dismissed'
                           and (remediate and (f.get('finding_type') == 1
                                               or id(f) in reviewed)))
         done_remed = 0
+        remediated_count = 0
         for finding in findings:
             if finding.get('status') == 'dismissed':
                 continue
             if remediate and (finding.get('finding_type') == 1
                               or id(finding) in reviewed):
                 done_remed += 1
+                # Cap AI remediation calls when AI_MAX_REMEDIATIONS > 0.
+                # Findings beyond the cap get the default OWASP text.
+                if max_remediations > 0 and remediated_count >= max_remediations:
+                    finding['remediation'] = self._default_remediation(finding)
+                    print(f"  [AI]   remediation {done_remed}/{total_remed}: "
+                          f"{finding.get('type')} @ "
+                          f"{(finding.get('url') or finding.get('file', '?'))[:50]} "
+                          f"(skipped - AI_MAX_REMEDIATIONS reached)")
+                    continue
+                remediated_count += 1
                 print(f"  [AI]   remediation {done_remed}/{total_remed}: "
                       f"{finding.get('type')} @ "
                       f"{(finding.get('url') or finding.get('file', '?'))[:50]}")
@@ -715,6 +729,7 @@ Provide a specific remediation in 3 sentences maximum.
 Include a concrete code-level fix example if applicable.
 """
         finding['remediation'] = self.provider.generate_remediation(prompt)
+        self.calls_made += 1
         return finding
 
     def _default_remediation(self, finding: dict) -> str:

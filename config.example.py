@@ -36,6 +36,9 @@ AI_REMEDIATION  = True   # generate AI remediation text (extra API calls);
                          # False = static OWASP text instead
 AI_MAX_FINDINGS = 0      # cap AI-reviewed findings by severity
                          # (0 = review all; e.g. 20 = top 20 most severe)
+AI_MAX_REMEDIATIONS = 0  # cap AI-generated remediations
+                         # (0 = remediate all retained findings; e.g. 5 =
+                         # only the first 5 retained findings get AI text)
 
 # ── Report settings ───────────────────────────────────────────────────────────
 REPORT_OUTPUT_DIR = "reports"
