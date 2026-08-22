@@ -263,7 +263,7 @@ class Crawler:
             print(f"  [Crawler] Aborting scan.")
             return []
 
-        self._visit(self.base_url)
+        self._crawl_iterative(self.base_url)
 
         # ── REST API discovery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -353,65 +353,79 @@ class Crawler:
 
     # ── Visit logic ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-    def _visit(self, url: str):
-        if not self._in_scope(url):
-            return
-        clean_url = url.split('#')[0]
+    def _crawl_iterative(self, start_url: str):
+        """
+        Crawl with an explicit queue instead of recursion. The old
+        _visit() recursed once per link, so a deep site (or a
+        MAX_CRAWL_PAGES >= ~1000) raised an uncaught RecursionError
+        that aborted the whole crawl. LIFO order preserves the old
+        depth-first visit sequence. The page cap is enforced BEFORE
+        processing, so exactly MAX_CRAWL_PAGES pages are visited
+        (previously MAX+1, and every queued link still paid a visit
+        attempt after the cap was hit).
+        """
+        queue = [start_url]
+        while queue and len(self.visited) < config.MAX_CRAWL_PAGES:
+            url = queue.pop()
+            if not self._in_scope(url):
+                continue
+            clean_url = url.split('#')[0]
 
-        # Never visit destructive pages
-        if self._is_destructive_url(clean_url):
-            print(f"  [Crawler] Skipped (protected): {clean_url}")
-            return
+            # Never visit destructive pages
+            if self._is_destructive_url(clean_url):
+                print(f"  [Crawler] Skipped (protected): {clean_url}")
+                continue
 
-        if clean_url in self.visited:
-            return
-        self.visited.add(clean_url)
-        if len(self.visited) > config.MAX_CRAWL_PAGES:
-            return
-        try:
-            response = self.session.get(
-                url, timeout=config.REQUEST_TIMEOUT, allow_redirects=True
-            )
-        except Exception as e:
-            print(f"  [Crawler] Could not reach {url}: {e}")
-            return
-        if 'login' in response.url.lower() and url != response.url:
-            print(f"  [Crawler] Skipped (auth redirect): {url}")
-            return
-        print(f"  [Crawler] Visited: {url} [{response.status_code}]")
+            if clean_url in self.visited:
+                continue
+            self.visited.add(clean_url)
+            try:
+                response = self.session.get(
+                    url, timeout=config.REQUEST_TIMEOUT,
+                    allow_redirects=True
+                )
+            except Exception as e:
+                print(f"  [Crawler] Could not reach {url}: {e}")
+                continue
+            if 'login' in response.url.lower() and url != response.url:
+                print(f"  [Crawler] Skipped (auth redirect): {url}")
+                continue
+            print(f"  [Crawler] Visited: {url} [{response.status_code}]")
 
-        # Use the final URL after any server-side redirects as the base for
-        # resolving relative links. Without this, a redirect from
-        # /mutillidae → /mutillidae/index.php causes urljoin to produce
-        # /index.php?page=X (wrong path) instead of /mutillidae/index.php?page=X.
-        effective_url = response.url.split('#')[0]
-        if effective_url != clean_url:
-            self.visited.add(effective_url)
+            # Use the final URL after any server-side redirects as the
+            # base for resolving relative links. Without this, a redirect
+            # from /mutillidae to /mutillidae/index.php causes urljoin
+            # to produce /index.php?page=X (wrong path) instead of
+            # /mutillidae/index.php?page=X.
+            effective_url = response.url.split('#')[0]
+            if effective_url != clean_url:
+                self.visited.add(effective_url)
 
-        # Non-page content (PDFs, images, archives, raw binary): nothing to
-        # crawl or parse — don't let it pollute the endpoint list.
-        if self._is_binary(response):
-            print(f"  [Crawler] Skipped (non-HTML content): "
-                  f"{effective_url} [{response.headers.get('content-type', '?')}]")
-            return
+            # Non-page content (PDFs, images, archives, raw binary):
+            # nothing to crawl or parse - don't pollute the endpoint list.
+            if self._is_binary(response):
+                print(f"  [Crawler] Skipped (non-HTML content): "
+                      f"{effective_url} "
+                      f"[{response.headers.get('content-type', '?')}]")
+                continue
 
-        # JSON response — it's an API endpoint, not an HTML page.
-        if self._is_json(response):
-            self._add_api_endpoint(effective_url)
-            return
+            # JSON response - it's an API endpoint, not an HTML page.
+            if self._is_json(response):
+                self._add_api_endpoint(effective_url)
+                continue
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        parsed = urlparse(effective_url)
-        if parsed.query:
-            params = parse_qs(parsed.query)
-            # _add_endpoint strips the query and folds it into params.
-            self._add_endpoint(effective_url, "GET",
-                               {k: v[0] for k, v in params.items()})
-        for form in soup.find_all('form'):
-            self._process_form(effective_url, form)
-        for tag in soup.find_all('a', href=True):
-            full_url = urljoin(effective_url, tag['href'].strip())
-            self._visit(full_url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            parsed = urlparse(effective_url)
+            if parsed.query:
+                params = parse_qs(parsed.query)
+                # _add_endpoint strips the query and folds it into params.
+                self._add_endpoint(effective_url, "GET",
+                                   {k: v[0] for k, v in params.items()})
+            for form in soup.find_all('form'):
+                self._process_form(effective_url, form)
+            for tag in soup.find_all('a', href=True):
+                full_url = urljoin(effective_url, tag['href'].strip())
+                queue.append(full_url)
 
     # ── REST API Discovery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
