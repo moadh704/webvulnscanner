@@ -365,7 +365,8 @@ class Crawler:
         attempt after the cap was hit).
         """
         queue = [start_url]
-        while queue and len(self.visited) < config.MAX_CRAWL_PAGES:
+        cap    = max(1, config.MAX_CRAWL_PAGES)
+        while queue and len(self.visited) < cap:
             url = queue.pop()
             if not self._in_scope(url):
                 continue
@@ -425,7 +426,12 @@ class Crawler:
                 self._process_form(effective_url, form)
             for tag in soup.find_all('a', href=True):
                 full_url = urljoin(effective_url, tag['href'].strip())
-                queue.append(full_url)
+                # Skip already-visited URLs at enqueue time so a page
+                # linking the same URL N times doesn't inflate the queue
+                # with N duplicate entries (each popped and skipped
+                # later). Fragments are stripped to match the visited set.
+                if full_url.split('#')[0] not in self.visited:
+                    queue.append(full_url)
 
     # ── REST API Discovery ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
