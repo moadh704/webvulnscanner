@@ -532,13 +532,53 @@ def main():
     all_findings    = []
     static_findings = []
     quiet           = args.quiet
+    paths           = {}
+
+    try:
+        paths = _run_scan_phases(
+            args, tracker, scan_manager, mode, use_ai, quiet,
+            all_findings, static_findings
+        )
+    except Exception as e:
+        if not quiet:
+            print(f"\n[!] Scan aborted by unexpected error: {e}")
+            import traceback
+            traceback.print_exc()
+        # Best-effort partial report: whatever findings were collected
+        # before the crash are still useful for triage.
+        if all_findings:
+            try:
+                from core.reporter import Reporter
+                with _QuietMode(quiet):
+                    paths = Reporter(
+                        all_findings, args.output,
+                        report_name   = args.report_name,
+                        output_format = getattr(args, 'output_format', 'both')
+                    ).generate()
+                if not quiet:
+                    print(f"  [Partial report] {paths}")
+            except Exception as report_err:
+                if not quiet:
+                    print(f"[!] Could not write partial report: {report_err}")
+        sys.exit(1)
+    finally:
+        tracker.done(all_findings, paths)
+
+
+def _run_scan_phases(args, tracker, scan_manager, mode, use_ai, quiet,
+                     all_findings, static_findings):
+    """Execute the static/dynamic/AI/report pipeline. Kept separate from
+    main() so unexpected failures can be caught and a partial report still
+    produced."""
+
+    paths = {}
 
     # ── Static Phase ──────────────────────────────────────────────────────────
     if mode in ("hybrid", "static") and config.SOURCE_DIR:
         tracker.phase("Static Analysis", f"Scanning {config.SOURCE_DIR}")
         from static.scanner import StaticScanner
         with _QuietMode(quiet):
-            static_findings = StaticScanner(scan_manager).run(config.SOURCE_DIR)
+            static_findings[:] = StaticScanner(scan_manager).run(config.SOURCE_DIR)
         all_findings.extend(static_findings)
 
     # ── Dynamic Phase ─────────────────────────────────────────────────────────
@@ -668,7 +708,7 @@ def main():
                       f"{len(all_findings) - len(static_findings)} dynamic")
         from core.correlator import Correlator
         with _QuietMode(quiet):
-            all_findings = Correlator(difficulty=args.difficulty) \
+            all_findings[:] = Correlator(difficulty=args.difficulty) \
                 .correlate(all_findings)
 
     # ── AI Enhancement ────────────────────────────────────────────────────────
@@ -677,7 +717,7 @@ def main():
                       f"Reviewing {len(all_findings)} finding(s) with {config.AI_PROVIDER}")
         from core.ai_provider import AIEnhancer
         with _QuietMode(quiet):
-            all_findings = AIEnhancer().enhance(all_findings)
+            all_findings[:] = AIEnhancer().enhance(all_findings)
 
     # ── Report ────────────────────────────────────────────────────────────────
     paths = {}
@@ -694,8 +734,19 @@ def main():
         if not quiet:
             print("\n  No findings to report.")
 
-    tracker.done(all_findings, paths)
+    return paths
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception as e:
+        # Last-resort safety net — should rarely be reached because main()
+        # catches scan-phase exceptions, but protects against crashes during
+        # argument parsing, tracker setup, or other startup code.
+        print(f"[!] Fatal error: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
