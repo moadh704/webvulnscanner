@@ -514,7 +514,7 @@ def main():
 
     scan_manager = ScanManager(args.scan)
     mode         = determine_mode(args)
-    use_ai       = config.AI_PROVIDER != "none"
+    use_ai       = (config.AI_PROVIDER or "").strip().lower() not in ("none", "")
 
     # Suppress crawler/injector verbose output in quiet mode
     config.QUIET   = args.quiet

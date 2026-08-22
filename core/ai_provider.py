@@ -284,9 +284,9 @@ def get_provider() -> AIProvider:
         "ollama"   : OllamaProvider,
         "none"     : NoAIProvider,
     }
-    provider_class = registry.get(
-        config.AI_PROVIDER.lower(), NoAIProvider
-    )
+    # Treat None, empty string, or whitespace as "none" instead of crashing.
+    provider_name = (config.AI_PROVIDER or "").strip().lower() or "none"
+    provider_class = registry.get(provider_name, NoAIProvider)
     try:
         return provider_class()
     except Exception as e:
@@ -330,7 +330,8 @@ class AIEnhancer:
         self.cache      = self._load_cache()
         self.calls_made = 0
         self.cache_hits = 0
-        print(f"  [AI] Provider: {config.AI_PROVIDER}")
+        provider_label = (config.AI_PROVIDER or "").strip() or "none"
+        print(f"  [AI] Provider: {provider_label}")
         if self.static_only_mode:
             print(f"  [AI] Mode: static-only (lenient review)")
         else:
@@ -339,7 +340,7 @@ class AIEnhancer:
     def enhance(self, findings: list) -> list:
         """Process all findings through the AI layer."""
         if isinstance(self.provider, NoAIProvider):
-            print("  [AI] AI disabled — adding default remediation text.")
+            print("  [AI] AI disabled - adding default remediation text.")
             for f in findings:
                 f['ai_note']     = None
                 f['remediation'] = self._default_remediation(f)
