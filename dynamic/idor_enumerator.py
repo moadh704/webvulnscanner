@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 
 import config
+from core.http_utils import bounded_request
 
 # URLs to skip
 SKIP_URLS = [
@@ -108,24 +109,27 @@ class IDOREnumerator:
         for endpoint in api_endpoints:
             url = f"{base}{endpoint}"
             try:
-                resp = self.session.get(
-                    url, timeout=config.REQUEST_TIMEOUT,
+                resp = bounded_request(
+                    'GET', url, session=self.session,
+                    timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )
                 if resp.status_code == 200:
                     # Try enumerating IDs
                     for id_val in [1, 2, 3]:
                         id_url = f"{url}/{id_val}"
-                        r1 = self.session.get(
-                            id_url, timeout=config.REQUEST_TIMEOUT
+                        r1 = bounded_request(
+                            'GET', id_url, session=self.session,
+                            timeout=config.REQUEST_TIMEOUT
                         )
                         # Control: refetch the SAME id. If the page
                         # already changes between identical requests
                         # (timestamps, nonces, random banners), any
                         # cross-ID difference is noise — skip honestly
                         # instead of reporting a fabricated IDOR.
-                        control = self.session.get(
-                            id_url, timeout=config.REQUEST_TIMEOUT
+                        control = bounded_request(
+                            'GET', id_url, session=self.session,
+                            timeout=config.REQUEST_TIMEOUT
                         )
                         control_noise = 0.0
                         if control is not None and \
@@ -138,8 +142,9 @@ class IDOREnumerator:
                                   f"{control_noise:.0%})")
                             continue
 
-                        r2 = self.session.get(
-                            f"{url}/{id_val + 1}",
+                        r2 = bounded_request(
+                            'GET', f"{url}/{id_val + 1}",
+                            session=self.session,
                             timeout=config.REQUEST_TIMEOUT
                         )
                         if r1.status_code == 200 and \
@@ -181,8 +186,9 @@ class IDOREnumerator:
             return False
         try:
             login_url = self.auth['url']
-            resp      = self.session.get(
-                login_url, timeout=config.REQUEST_TIMEOUT,
+            resp      = bounded_request(
+                'GET', login_url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )
             soup      = BeautifulSoup(resp.text, 'html.parser')
@@ -194,8 +200,9 @@ class IDOREnumerator:
             post_data[self.auth['password_field']] = self.auth['password']
             for k, v in self.auth.get('extra_fields', {}).items():
                 post_data[k] = v
-            r = self.session.post(
-                login_url, data=post_data,
+            r = bounded_request(
+                'POST', login_url, session=self.session,
+                data=post_data,
                 timeout=config.REQUEST_TIMEOUT, allow_redirects=True
             )
             if 'login' not in r.url.lower():
@@ -370,8 +377,9 @@ class IDOREnumerator:
 
     def _get_user_token(self, url: str) -> str:
         try:
-            resp  = self.session.get(
-                url, timeout=config.REQUEST_TIMEOUT,
+            resp  = bounded_request(
+                'GET', url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )
             soup  = BeautifulSoup(resp.text, 'html.parser')
@@ -391,14 +399,16 @@ class IDOREnumerator:
 
         try:
             if ep['method'] == 'POST':
-                return self.session.post(
-                    clean_url, data=params,
+                return bounded_request(
+                    'POST', clean_url, session=self.session,
+                    data=params,
                     timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )
             else:
-                return self.session.get(
-                    clean_url, params=params,
+                return bounded_request(
+                    'GET', clean_url, session=self.session,
+                    params=params,
                     timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )

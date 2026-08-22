@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse, parse_qs
 
 import config
+from core.http_utils import bounded_request
 
 import warnings
 from bs4 import XMLParsedAsHTMLWarning
@@ -131,8 +132,8 @@ def _fetch_and_parse(url: str, timeout: int) -> dict:
     """Fetch a URL and run _parse_login_form on the response. Returns the
     parsed dict, or None on any failure / no-form-found."""
     try:
-        resp = requests.get(
-            url,
+        resp = bounded_request(
+            'GET', url,
             timeout=timeout,
             headers=config.REQUEST_HEADERS,
             allow_redirects=True,
@@ -254,8 +255,9 @@ class Crawler:
 
         # Test connectivity with configured timeout
         try:
-            self.session.get(
-                self.base_url, timeout=max(config.REQUEST_TIMEOUT, 20),
+            bounded_request(
+                'GET', self.base_url, session=self.session,
+                timeout=max(config.REQUEST_TIMEOUT, 20),
                 allow_redirects=True
             )
         except Exception as e:
@@ -279,7 +281,10 @@ class Crawler:
             return
         print(f"  [Crawler] Authenticating at: {login_url}")
         try:
-            resp = self.session.get(login_url, timeout=config.REQUEST_TIMEOUT)
+            resp = bounded_request(
+                'GET', login_url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT
+            )
             soup = BeautifulSoup(resp.text, 'html.parser')
             post_data = {}
             for hidden in soup.find_all('input', type='hidden'):
@@ -291,8 +296,9 @@ class Crawler:
             post_data[self.auth['password_field']] = self.auth['password']
             for k, v in self.auth.get('extra_fields', {}).items():
                 post_data[k] = v
-            login_resp = self.session.post(
-                login_url, data=post_data,
+            login_resp = bounded_request(
+                'POST', login_url, session=self.session,
+                data=post_data,
                 timeout=config.REQUEST_TIMEOUT, allow_redirects=True
             )
             if 'login' not in login_resp.url.lower():
@@ -326,7 +332,10 @@ class Crawler:
 
         try:
             # GET first so any CSRF / hidden tokens are picked up.
-            r1 = self.session.get(sec_url, timeout=config.REQUEST_TIMEOUT)
+            r1 = bounded_request(
+                'GET', sec_url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT
+            )
             soup = BeautifulSoup(r1.text, 'html.parser')
             post_data = {}
             for hidden in soup.find_all('input', type='hidden'):
@@ -336,8 +345,9 @@ class Crawler:
             post_data['security']   = level
             post_data['seclev_submit'] = 'Submit'  # DVWA submit button name
 
-            r2 = self.session.post(
-                sec_url, data=post_data,
+            r2 = bounded_request(
+                'POST', sec_url, session=self.session,
+                data=post_data,
                 timeout=config.REQUEST_TIMEOUT, allow_redirects=True
             )
             # DVWA echoes the new level back on the page after submit.
@@ -381,8 +391,9 @@ class Crawler:
                 continue
             self.visited.add(clean_url)
             try:
-                response = self.session.get(
-                    url, timeout=config.REQUEST_TIMEOUT,
+                response = bounded_request(
+                    'GET', url, session=self.session,
+                    timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )
             except Exception as e:
@@ -441,8 +452,8 @@ class Crawler:
 
         # robots.txt
         try:
-            r = self.session.get(
-                f"{base}/robots.txt",
+            r = bounded_request(
+                'GET', f"{base}/robots.txt", session=self.session,
                 timeout=config.REQUEST_TIMEOUT
             )
             if r.status_code == 200 and 'html' not in r.headers.get(
@@ -459,8 +470,8 @@ class Crawler:
 
         # sitemap.xml
         try:
-            r = self.session.get(
-                f"{base}/sitemap.xml",
+            r = bounded_request(
+                'GET', f"{base}/sitemap.xml", session=self.session,
                 timeout=config.REQUEST_TIMEOUT
             )
             if r.status_code == 200:
@@ -495,8 +506,9 @@ class Crawler:
         add it as an endpoint. Returns True if found.
         """
         try:
-            r = self.session.get(
-                url, timeout=config.REQUEST_TIMEOUT,
+            r = bounded_request(
+                'GET', url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )
             self.visited.add(url)
@@ -510,8 +522,8 @@ class Crawler:
                     for id_val in ['1', '2']:
                         id_url = f"{url.rstrip('/')}/{id_val}"
                         try:
-                            r2 = self.session.get(
-                                id_url,
+                            r2 = bounded_request(
+                                'GET', id_url, session=self.session,
                                 timeout=config.REQUEST_TIMEOUT
                             )
                             if r2.status_code == 200 and self._is_json(r2):

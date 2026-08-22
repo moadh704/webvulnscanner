@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
+from core.http_utils import bounded_request
 
 # ── Patterns that confirm successful path traversal ───────────────────────────
 # Tier 1: actual sensitive file contents leaked into the response.
@@ -121,8 +122,9 @@ class TraversalInjector:
             return False
         try:
             login_url = self.auth['url']
-            resp      = self.session.get(
-                login_url, timeout=config.REQUEST_TIMEOUT,
+            resp      = bounded_request(
+                'GET', login_url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )
             soup      = BeautifulSoup(resp.text, 'html.parser')
@@ -134,8 +136,9 @@ class TraversalInjector:
             post_data[self.auth['password_field']] = self.auth['password']
             for k, v in self.auth.get('extra_fields', {}).items():
                 post_data[k] = v
-            r = self.session.post(
-                login_url, data=post_data,
+            r = bounded_request(
+                'POST', login_url, session=self.session,
+                data=post_data,
                 timeout=config.REQUEST_TIMEOUT, allow_redirects=True
             )
             if 'login' not in r.url.lower():
@@ -229,8 +232,9 @@ class TraversalInjector:
 
     def _get_user_token(self, url: str) -> str:
         try:
-            resp  = self.session.get(
-                url, timeout=config.REQUEST_TIMEOUT,
+            resp  = bounded_request(
+                'GET', url, session=self.session,
+                timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )
             soup  = BeautifulSoup(resp.text, 'html.parser')
@@ -250,14 +254,16 @@ class TraversalInjector:
 
         try:
             if ep['method'] == 'POST':
-                return self.session.post(
-                    clean_url, data=params,
+                return bounded_request(
+                    'POST', clean_url, session=self.session,
+                    data=params,
                     timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )
             else:
-                return self.session.get(
-                    clean_url, params=params,
+                return bounded_request(
+                    'GET', clean_url, session=self.session,
+                    params=params,
                     timeout=config.REQUEST_TIMEOUT,
                     allow_redirects=True
                 )

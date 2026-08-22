@@ -4,6 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 
 import config
+from core.http_utils import bounded_request
 
 # ── Security headers and their risk if missing ────────────────────────────────
 SECURITY_HEADERS = {
@@ -73,8 +74,8 @@ class HeaderInspector:
                   "(target is HTTP — header meaningless)")
 
         try:
-            response = self.session.get(
-                base_url,
+            response = bounded_request(
+                'GET', base_url, session=self.session,
                 timeout=config.REQUEST_TIMEOUT,
                 allow_redirects=True
             )

@@ -6,10 +6,11 @@ TARGET_URL  = ""
 SOURCE_DIR  = ""
 
 # ── Request settings ──────────────────────────────────────────────────────────
-REQUEST_TIMEOUT   = 10
-TIME_BASED_DELAY  = 4
-MAX_CRAWL_PAGES   = 50
-REQUEST_HEADERS   = {
+REQUEST_TIMEOUT      = 10
+TIME_BASED_DELAY     = 4
+MAX_CRAWL_PAGES      = 50
+MAX_RESPONSE_BYTES   = 2 * 1024 * 1024  # 2 MiB — cap response body size
+REQUEST_HEADERS      = {
     "User-Agent": "WebVulnScanner/1.0 (Academic Security Research)"
 }
 
