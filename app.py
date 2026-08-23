@@ -332,8 +332,10 @@ with st.sidebar:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def base_command():
-    if shutil.which("wvs"):
-        return ["wvs"]
+    # Always use the current Python + main.py directly — most reliable on
+    # Windows where `wvs` may be a .bat/.exe that needs shell=True and
+    # paths contain spaces and `&` (e.g. "10 - Security & Projects").
+    # Using sys.executable + absolute main.py avoids WinError 2.
     root = os.path.dirname(os.path.abspath(__file__))
     return [sys.executable, os.path.join(root, "main.py")]
 
@@ -517,6 +519,10 @@ if scan_button and history_choice == "(new scan)":
 
         logs = []
         try:
+            # Run from project root so reports/ and config.py resolve correctly,
+            # and use list-form to handle spaces and `&` in paths like
+            # "10 - Security & Projects" without shell quoting issues.
+            root = os.path.dirname(os.path.abspath(__file__))
             proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -525,6 +531,7 @@ if scan_button and history_choice == "(new scan)":
                 encoding="utf-8",
                 errors="replace",
                 env=env,
+                cwd=root,
                 bufsize=1
             )
             # Stream line by line
@@ -630,6 +637,8 @@ if scan_button and history_choice == "(new scan)":
 
         except subprocess.TimeoutExpired:
             st.error("⏱️ Scan timed out after 10 minutes.")
+        except FileNotFoundError as e:
+            st.error(f"❌ Could not start scanner: {e}\n\nCommand was: `{' '.join(cmd)}`\n\nTry running `setup.bat` again to reinstall the `wvs` command.")
         except Exception as e:
             st.error(f"❌ Error: {e}")
 

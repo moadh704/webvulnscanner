@@ -268,7 +268,9 @@ class OpenRouterProvider(AIProvider):
 
     def __init__(self, model: str = None):
         self.api_key = getattr(config, 'OPENROUTER_API_KEY', '')
-        self.model   = model or getattr(
+        # Allow UI to override model via env without editing config.py
+        env_model = os.environ.get("OPENROUTER_MODEL")
+        self.model   = model or env_model or getattr(
             config, 'OPENROUTER_MODEL',
             'nvidia/nemotron-3-nano-30b-a3b:free'
         )
