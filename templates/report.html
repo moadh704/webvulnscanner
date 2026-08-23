@@ -85,10 +85,28 @@
 
         /* ── Findings ── */
         .findings { padding: 24px 40px; }
-        .findings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+        .findings-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
         .findings-header h2 { font-size: 18px; color: var(--text); }
         .expand-all-btn { background: var(--surface2); color: var(--blue); border: 1px solid var(--blue); padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: background 0.2s; }
         .expand-all-btn:hover { background: rgba(88,166,255,0.1); }
+
+        /* ── Filter bar ── */
+        .filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 16px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 16px; }
+        .filter-bar input[type="text"] { flex: 1 1 200px; min-width: 160px; background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; font-size: 12px; }
+        .filter-bar input[type="text"]::placeholder { color: var(--text-muted); }
+        .filter-bar select { background: var(--surface); border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 6px; font-size: 12px; }
+        .chip { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text-muted); transition: all 0.15s; user-select: none; }
+        .chip.active { color: var(--text); border-color: currentColor; }
+        .chip-sev-critical.active { background: rgba(255,68,68,0.2); color: var(--critical); border-color: var(--critical); }
+        .chip-sev-high.active     { background: rgba(255,140,0,0.2); color: var(--high); border-color: var(--high); }
+        .chip-sev-medium.active   { background: rgba(240,192,64,0.2); color: var(--medium); border-color: var(--medium); }
+        .chip-sev-low.active      { background: rgba(63,185,80,0.2); color: var(--low); border-color: var(--low); }
+        .chip-type.active         { background: rgba(88,166,255,0.15); color: var(--blue); border-color: var(--blue); }
+        .chip-status.active       { background: rgba(188,140,255,0.15); color: var(--purple); border-color: var(--purple); }
+        .filter-count { font-size: 12px; color: var(--text-muted); margin-left: auto; }
+        .clear-btn { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; }
+        .clear-btn:hover { color: var(--text); border-color: var(--text-muted); }
+        .no-match { text-align: center; padding: 30px; color: var(--text-muted); font-size: 13px; display: none; }
 
         .finding-card { background: var(--surface); border-radius: 10px; border-left: 4px solid var(--border); margin-bottom: 10px; border: 1px solid var(--border); border-left: 4px solid; overflow: hidden; transition: border-color 0.2s; }
         .finding-card.critical { border-left-color: var(--critical); }
@@ -183,15 +201,43 @@
 <!-- Findings -->
 <div class="findings">
     <div class="findings-header">
-        <h2>Findings ({{ findings | rejectattr('status', 'equalto', 'dismissed') | list | length }})</h2>
+        <h2 id="findingsTitle">Findings ({{ findings | rejectattr('status', 'equalto', 'dismissed') | list | length }})</h2>
         {% if findings %}<button class="expand-all-btn" onclick="toggleAll()">Expand All</button>{% endif %}
     </div>
 
+    {% if findings | rejectattr('status', 'equalto', 'dismissed') | list | length > 0 %}
+    <div class="filter-bar" id="filterBar">
+        <input type="text" id="searchInput" placeholder="Search URL, param, type, OWASP..." oninput="applyFilters()">
+        <span style="font-size:11px;color:var(--text-muted);">Severity:</span>
+        <button class="chip chip-sev-critical" data-filter="sev" data-value="critical" onclick="toggleChip(this)">Critical</button>
+        <button class="chip chip-sev-high" data-filter="sev" data-value="high" onclick="toggleChip(this)">High</button>
+        <button class="chip chip-sev-medium" data-filter="sev" data-value="medium" onclick="toggleChip(this)">Medium</button>
+        <button class="chip chip-sev-low" data-filter="sev" data-value="low" onclick="toggleChip(this)">Low</button>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Type:</span>
+        <span id="typeChips"></span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;">Status:</span>
+        <button class="chip chip-status" data-filter="status" data-value="verified" onclick="toggleChip(this)">Verified</button>
+        <button class="chip chip-status" data-filter="status" data-value="candidate" onclick="toggleChip(this)">Candidate</button>
+        <button class="chip chip-status" data-filter="status" data-value="detected" onclick="toggleChip(this)">Detected</button>
+        <select id="sortSelect" onchange="applyFilters()">
+            <option value="severity">Sort: Severity</option>
+            <option value="type">Sort: Type</option>
+            <option value="url">Sort: URL</option>
+            <option value="confidence">Sort: Confidence</option>
+        </select>
+        <span class="filter-count" id="filterCount"></span>
+        <button class="clear-btn" onclick="clearFilters()">Clear</button>
+    </div>
+    <div class="no-match" id="noMatch">No findings match the current filters.</div>
+    {% endif %}
+
+    <div id="findingsContainer">
     {% for f in findings %}
     {% set sev = f.severity | lower %}
     {% set dismissed = f.status == 'dismissed' %}
+    {% set status_label = 'verified' if f.finding_type == 1 else ('candidate' if f.finding_type == 2 else 'detected') %}
     {% if not dismissed %}
-    <div class="finding-card {{ sev }}" id="card-{{ loop.index }}">
+    <div class="finding-card {{ sev }}" id="card-{{ loop.index }}" data-sev="{{ sev }}" data-type="{{ f.type | lower | e }}" data-status="{{ status_label }}" data-url="{{ (f.url or f.file or '') | lower | e }}" data-param="{{ (f.parameter or '') | lower | e }}" data-confidence="{{ f.confidence }}">
         <div class="finding-header" onclick="toggleCard('card-{{ loop.index }}')">
             <span class="sev-badge sev-{{ sev }}">{{ f.severity }}</span>
             <h3>[{{ f.type | upper }}] {{ f.url or f.file or 'Unknown' }}{% if f.parameter %} — <code style="color:#79c0ff;">{{ f.parameter }}</code>{% endif %}</h3>
@@ -236,20 +282,92 @@
     {% if not findings %}
     <div style="text-align:center;padding:40px;color:var(--text-muted);">No findings detected.</div>
     {% endif %}
+    </div>
 </div>
 <div class="footer">Generated by WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner</div>
 <script>
 function toggleCard(id) { document.getElementById(id).classList.toggle('open'); }
 let allExpanded = false;
 function toggleAll() {
-    const cards = document.querySelectorAll('.finding-card');
+    const cards = document.querySelectorAll('.finding-card:not([style*="display: none"])');
+    const visible = Array.from(document.querySelectorAll('.finding-card')).filter(c => c.style.display !== 'none');
     const btn = document.querySelector('.expand-all-btn');
     allExpanded = !allExpanded;
-    cards.forEach(c => allExpanded ? c.classList.add('open') : c.classList.remove('open'));
+    visible.forEach(c => allExpanded ? c.classList.add('open') : c.classList.remove('open'));
     btn.textContent = allExpanded ? 'Collapse All' : 'Expand All';
 }
 const firstCard = document.querySelector('.finding-card');
 if (firstCard) firstCard.classList.add('open');
+
+// ── Filter / search / sort ──
+const sevOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+function toggleChip(btn) { btn.classList.toggle('active'); applyFilters(); }
+function clearFilters() {
+    document.querySelectorAll('.chip.active').forEach(c => c.classList.remove('active'));
+    document.getElementById('searchInput').value = '';
+    document.getElementById('sortSelect').value = 'severity';
+    applyFilters();
+}
+function applyFilters() {
+    const activeSev = new Set(Array.from(document.querySelectorAll('.chip[data-filter="sev"].active')).map(c => c.dataset.value));
+    const activeType = new Set(Array.from(document.querySelectorAll('.chip[data-filter="type"].active')).map(c => c.dataset.value));
+    const activeStatus = new Set(Array.from(document.querySelectorAll('.chip[data-filter="status"].active')).map(c => c.dataset.value));
+    const query = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+    const sortBy = document.getElementById('sortSelect')?.value || 'severity';
+    const container = document.getElementById('findingsContainer');
+    const cards = Array.from(container ? container.querySelectorAll('.finding-card') : []);
+    let visible = 0;
+    cards.forEach(card => {
+        const sev = card.dataset.sev || '';
+        const type = card.dataset.type || '';
+        const status = card.dataset.status || '';
+        const haystack = (card.dataset.url + ' ' + card.dataset.param + ' ' + type + ' ' + card.textContent.toLowerCase());
+        let show = true;
+        if (activeSev.size && !activeSev.has(sev)) show = false;
+        if (activeType.size && !activeType.has(type)) show = false;
+        if (activeStatus.size && !activeStatus.has(status)) show = false;
+        if (query && !haystack.includes(query)) show = false;
+        card.style.display = show ? '' : 'none';
+        if (show) visible++;
+    });
+    // sort visible cards
+    if (container && sortBy !== 'severity' || activeSev.size || activeType.size || activeStatus.size || query) {
+        const visibleCards = cards.filter(c => c.style.display !== 'none');
+        const hiddenCards = cards.filter(c => c.style.display === 'none');
+        visibleCards.sort((a, b) => {
+            if (sortBy === 'severity') return (sevOrder[a.dataset.sev] ?? 9) - (sevOrder[b.dataset.sev] ?? 9);
+            if (sortBy === 'type') return (a.dataset.type || '').localeCompare(b.dataset.type || '');
+            if (sortBy === 'url') return (a.dataset.url || '').localeCompare(b.dataset.url || '');
+            if (sortBy === 'confidence') return parseFloat(b.dataset.confidence || 0) - parseFloat(a.dataset.confidence || 0);
+            return 0;
+        });
+        visibleCards.forEach(c => container.appendChild(c));
+        hiddenCards.forEach(c => container.appendChild(c));
+    }
+    const total = cards.length;
+    const countEl = document.getElementById('filterCount');
+    const titleEl = document.getElementById('findingsTitle');
+    const noMatch = document.getElementById('noMatch');
+    if (countEl) countEl.textContent = visible + ' / ' + total + ' shown';
+    if (titleEl) titleEl.textContent = 'Findings (' + visible + (visible !== total ? ' / ' + total : '') + ')';
+    if (noMatch) noMatch.style.display = (visible === 0 && total > 0) ? 'block' : 'none';
+}
+// Build type chips dynamically from rendered cards
+(function buildTypeChips() {
+    const container = document.getElementById('findingsContainer');
+    const chipHost = document.getElementById('typeChips');
+    if (!container || !chipHost) return;
+    const types = [...new Set(Array.from(container.querySelectorAll('.finding-card')).map(c => c.dataset.type).filter(Boolean))].sort();
+    types.forEach(t => {
+        const btn = document.createElement('button');
+        btn.className = 'chip chip-type';
+        btn.dataset.filter = 'type';
+        btn.dataset.value = t;
+        btn.textContent = t.toUpperCase();
+        btn.onclick = function() { toggleChip(btn); };
+        chipHost.appendChild(btn);
+    });
+})();
 
 {% if findings %}
 const severityCounts = {
