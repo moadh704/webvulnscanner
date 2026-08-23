@@ -253,6 +253,81 @@ class DeepSeekProvider(AIProvider):
         return self._call(prompt, max_tokens)
 
 
+# ── OpenRouter Provider (free aggregator, OpenAI-compatible) ─────────────────
+
+class OpenRouterProvider(AIProvider):
+    """
+    OpenRouter — one key, 35+ free models via an OpenAI-compatible API.
+    Default: nvidia/nemotron-3-nano-30b-a3b:free (good for review tasks).
+    Free tier: 20 RPM, no card. Get a key at https://openrouter.ai/keys
+    and set OPENROUTER_API_KEY in config.py. Swap models via
+    OPENROUTER_MODEL (e.g. liquid/lfm-2.5-2.6b:free).
+    """
+
+    API_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+    def __init__(self, model: str = None):
+        self.api_key = getattr(config, 'OPENROUTER_API_KEY', '')
+        self.model   = model or getattr(
+            config, 'OPENROUTER_MODEL',
+            'nvidia/nemotron-3-nano-30b-a3b:free'
+        )
+        if not self.api_key:
+            raise RuntimeError(
+                "OPENROUTER_API_KEY is empty. "
+                "Get a free key at https://openrouter.ai/keys "
+                "and set it in config.py"
+            )
+
+    def _call(self, prompt: str, max_tokens: int = 500) -> str:
+        try:
+            import requests
+            payload = {
+                "model"      : self.model,
+                "messages"   : [{"role": "user", "content": prompt}],
+                "max_tokens" : max_tokens,
+                "temperature": 0,
+            }
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type" : "application/json",
+                # Optional but recommended for OpenRouter rankings
+                "HTTP-Referer": "https://github.com/moadh704/webvulnscanner",
+                "X-Title"     : "WebVulnScanner",
+            }
+            last_err = None
+            for attempt in range(3):
+                try:
+                    r = requests.post(
+                        self.API_URL, headers=headers, json=payload,
+                        timeout=120,
+                    )
+                    r.raise_for_status()
+                    data = r.json()
+                    content = data["choices"][0]["message"]["content"]
+                    if content and content.strip():
+                        return content
+                    payload["max_tokens"] = min(payload["max_tokens"] * 2, 8000)
+                    last_err = "empty content"
+                    if attempt < 2:
+                        continue
+                    return "REAL (OpenRouter error: empty response)"
+                except Exception as e:
+                    last_err = e
+                    if attempt < 2:
+                        import time
+                        time.sleep(2 * (attempt + 1))
+            return f"REAL (OpenRouter error: {last_err})"
+        except Exception as e:
+            return f"REAL (OpenRouter error: {e})"
+
+    def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
+
+    def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
+        return self._call(prompt, max_tokens)
+
+
 # ── NoAI Provider (disabled fallback) ────────────────────────────────────────
 
 class NoAIProvider(AIProvider):
@@ -281,6 +356,7 @@ def get_provider() -> AIProvider:
         "deepseek" : DeepSeekProvider,
         "deepseek-flash" : lambda: DeepSeekProvider(model="deepseek-v4-flash"),
         "deepseek-pro"   : lambda: DeepSeekProvider(model="deepseek-v4-pro"),
+        "openrouter" : OpenRouterProvider,
         "ollama"   : OllamaProvider,
         "none"     : NoAIProvider,
     }

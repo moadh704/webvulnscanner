@@ -424,10 +424,10 @@ def parse_args():
     )
     parser.add_argument(
         "--ai-provider", type=str,
-        choices=["groq", "gemini", "deepseek", "deepseek-flash",
+        choices=["groq", "gemini", "openrouter", "deepseek", "deepseek-flash",
                  "deepseek-pro", "none"], default=None,
-        help="AI provider override\nOptions: groq, gemini, deepseek "
-             "(deepseek-flash / deepseek-pro for a specific V4 model), none"
+        help="AI provider override\nOptions: groq, gemini, openrouter, "
+             "deepseek (deepseek-flash / deepseek-pro), none"
     )
     parser.add_argument(
         "--no-ai", action="store_true",

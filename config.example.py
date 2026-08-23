@@ -20,12 +20,15 @@ REQUEST_HEADERS      = {
 ALLOW_SUBDOMAINS = False
 
 # ── AI Enhancement Layer ──────────────────────────────────────────────────────
-# Options: "groq" (free, recommended) | "gemini" (free tier) | "deepseek" |
+# Options: "groq" (free, recommended) | "gemini" (free tier) |
+#          "openrouter" (free, 35+ models) | "deepseek" |
 #          "ollama" (local) | "none"
 AI_PROVIDER    = "none"
 
 GEMINI_API_KEY = ""   # free at aistudio.google.com
 GROQ_API_KEY   = ""   # free at console.groq.com
+OPENROUTER_API_KEY = "" # free at openrouter.ai/keys (no card)
+OPENROUTER_MODEL   = "nvidia/nemotron-3-nano-30b-a3b:free"
 DEEPSEEK_API_KEY = "" # at platform.deepseek.com
 DEEPSEEK_MODEL   = "deepseek-v4-flash"
 OLLAMA_MODEL   = "codellama"
