@@ -14,7 +14,7 @@
 [![Last commit](https://img.shields.io/github/last-commit/moadh704/webvulnscanner?style=flat-square&logo=github)](https://github.com/moadh704/webvulnscanner/commits/main)
 [![Interface](https://img.shields.io/badge/interface-CLI%20%7C%20Streamlit-8A2BE2?style=flat-square&logo=streamlit&logoColor=white)](#web-ui)
 [![Analysis](https://img.shields.io/badge/analysis-static%20%2B%20dynamic-0ea5e9?style=flat-square)](#how-it-works)
-[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20DeepSeek%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
+[![AI](https://img.shields.io/badge/AI-Groq%20%7C%20Gemini%20%7C%20OpenRouter%20%7C%20DeepSeek%20%7C%20Ollama-critical?style=flat-square)](#ai-enhancement-optional)
 
 ---
 
@@ -56,7 +56,7 @@ AI layer for false-positive review and remediation notes.
 | **Hybrid analysis** | Static rules (semgrep + AST) fused with a live crawl and payload injection | `full` / `static` / `dynamic` modes |
 | **6 vulnerability modules** | SQLi, reflected XSS, command injection, path traversal, IDOR, security misconfiguration | per-module via `--scan` |
 | **Verified findings** | Tiered output — static candidates that are *confirmed* against the live target are upgraded | Type 1 / 2 / 3 |
-| **Optional AI layer** | False-positive review and remediation notes via Groq, Gemini, or local Ollama | opt-in |
+| **Optional AI layer** | False-positive review and remediation notes via Groq, Gemini, OpenRouter (35+ free models), DeepSeek, or local Ollama | opt-in |
 | **Rich reports** | Interactive HTML (charts) + machine-readable JSON | `reports/` |
 | **Two interfaces** | CLI for scripting, Streamlit web UI for point-and-click | `main.py` / `app.py` |
 | **One-command setup** | Windows `setup.bat` + `ui.bat` helpers | batteries included |
@@ -163,7 +163,7 @@ wvs --url http://localhost/dvwa \
 | `--output-format` | `html` \| `json` \| `both` | `both` |
 | `--username` / `--password` | Login for authenticated scans | — |
 | `--difficulty` | DVWA level: `low`–`impossible` | — |
-| `--ai-provider` | `groq` \| `gemini` \| `deepseek` \| `deepseek-flash` \| `deepseek-pro` \| `none` | config |
+| `--ai-provider` | `groq` \| `gemini` \| `openrouter` \| `deepseek` \| `deepseek-flash` \| `deepseek-pro` \| `none` | config |
 | `--no-ai` | Disable AI layer | AI on if configured |
 | `--timeout` | Request timeout (seconds) | config |
 | `--max-pages` | Crawl limit | config |
@@ -198,6 +198,7 @@ Real output from a full hybrid scan of a **local DVWA lab** (security level: low
 | [HTML report](docs/examples/sample-report-dvwa.html) | `http://localhost/dvwa` | Full interactive report with severity charts, no AI |
 | [Results table](docs/examples/sample-results-dvwa.md) | `http://localhost/dvwa` | Readable findings summary from the same run |
 | [JSON](docs/examples/sample-report-dvwa.json) | `http://localhost/dvwa` | Machine-readable, for tooling demos |
+| [OpenRouter AI](docs/examples/sample-report-dvwa-openrouter.html) | `http://localhost/dvwa` | Hybrid + OpenRouter AI (41 findings, 15 dismissed) — free, no card |
 | [bWAPP XSS](docs/examples/sample-report-bwapp-xss.html) | `http://localhost/bWAPP/xss_get.php` | Focused reflected XSS run |
 
 More in [`docs/examples/`](docs/examples/). All samples come from **local lab
@@ -230,24 +231,30 @@ remediation notes:
 
 | Provider | Type | Notes |
 |----------|------|-------|
-| **Groq** | Cloud | Fast; free tier available |
-| **Gemini** | Cloud | Free tier available |
+| **Groq** | Cloud | Fast; free tier, 14k req/day |
+| **Gemini** | Cloud | Free tier, 1M-token context |
+| **OpenRouter** | Cloud | Free, 35+ models via 1 key, 20 RPM, no card |
 | **DeepSeek Flash** | Cloud | V4 Flash — fast & cheap, 1M-token context, OpenAI-compatible |
 | **DeepSeek Pro** | Cloud | V4 Pro — deeper reasoning for tricky findings |
 | **Ollama** | Local | Runs entirely on your machine |
 
 ```bash
 # Enable a provider
+wvs --url http://localhost/dvwa --ai-provider openrouter   # free, no card
+wvs --url http://localhost/dvwa --ai-provider groq         # free, 14k/day
 wvs --url http://localhost/dvwa --ai-provider deepseek-flash
-wvs --url http://localhost/dvwa --ai-provider deepseek-pro
 
 # Or disable it
 wvs --url http://localhost/dvwa --no-ai
 ```
 
-Set the key in `config.py`: `DEEPSEEK_API_KEY` (get one at
-[platform.deepseek.com](https://platform.deepseek.com/api_keys)). Plain
-`deepseek` uses `DEEPSEEK_MODEL` from config (default `deepseek-v4-flash`).
+Set keys in `config.py`:
+- `OPENROUTER_API_KEY` at [openrouter.ai/keys](https://openrouter.ai/keys) (free, no card)
+- `GROQ_API_KEY` at [console.groq.com](https://console.groq.com)
+- `DEEPSEEK_API_KEY` at [platform.deepseek.com](https://platform.deepseek.com/api_keys)
+- Plain `deepseek` uses `DEEPSEEK_MODEL` from config (default `deepseek-v4-flash`).
+
+HTML reports now include a filter bar (severity / type / status chips, text search, sort) for triage.
 
 ## Project layout
 
