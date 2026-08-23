@@ -4,7 +4,7 @@ cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8
 
 if not exist "venv\Scripts\activate.bat" (
-    echo [INFO] No venv found — running setup...
+    echo [INFO] No venv found - running setup...
     call setup.bat
     if errorlevel 1 exit /b 1
 )
@@ -13,7 +13,7 @@ call venv\Scripts\activate.bat >nul 2>&1
 :menu
 cls
 echo ========================================
-echo   WebVulnScanner — Quick Menu
+echo   WebVulnScanner - Quick Menu
 echo ========================================
 echo.
 echo   1. Show help              (wvs --help)
@@ -56,7 +56,7 @@ if "%choice%"=="5" (
         echo Opening reports folder...
         explorer reports
     ) else (
-        echo No reports folder yet — run a scan first.
+        echo No reports folder yet - run a scan first.
         pause
     )
     goto menu

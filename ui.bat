@@ -2,14 +2,14 @@
 chcp 65001 >nul 2>&1
 setlocal
 
-REM ── WebVulnScanner — Web UI Launcher ───────────────────────────────────────
+REM ── WebVulnScanner - Web UI Launcher ───────────────────────────────────────
 REM Double-click this file to start the Streamlit dashboard.
 REM Handles venv creation, dependency checks, and port conflicts automatically.
 
 cd /d "%~dp0"
 
 echo ========================================
-echo   WebVulnScanner — Web UI
+echo   WebVulnScanner - Web UI
 echo ========================================
 echo.
 
@@ -43,7 +43,7 @@ if errorlevel 1 (
     pip install -r requirements.txt --quiet --disable-pip-version-check
 )
 
-REM 4. Find free port (8501 → 8502 if busy)
+REM 4. Find free port (8501 -> 8502 if busy)
 set PORT=8501
 netstat -ano | findstr ":8501" >nul 2>&1
 if not errorlevel 1 (
@@ -61,7 +61,7 @@ REM 5. Ensure config.py exists (holds API keys, gitignored)
 if not exist "config.py" (
     if exist "config.example.py" (
         copy /y config.example.py config.py >nul
-        echo [INFO] Created config.py from config.example.py — add your API keys there.
+        echo [INFO] Created config.py from config.example.py - add your API keys there.
     )
 )
 

@@ -1,5 +1,5 @@
 @echo off
-REM wvs.bat — Quick launcher for WebVulnScanner (no shell injection, UTF-8 safe)
+REM wvs.bat - Quick launcher for WebVulnScanner (no shell injection, UTF-8 safe)
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
 set PYTHONIOENCODING=utf-8

@@ -2,7 +2,7 @@
 chcp 65001 >nul 2>&1
 setlocal
 echo ========================================
-echo   WebVulnScanner — Installation
+echo   WebVulnScanner - Installation
 echo ========================================
 echo.
 
@@ -29,7 +29,7 @@ if not exist "venv\Scripts\activate.bat" (
     )
     echo       Created venv\
 ) else (
-    echo       venv\ already exists — skipping.
+    echo       venv\ already exists - skipping.
 )
 
 call venv\Scripts\activate.bat >nul 2>&1
@@ -45,7 +45,7 @@ echo [2/4] Installing dependencies...
 python -m pip install --upgrade pip --quiet --disable-pip-version-check
 pip install -r requirements.txt --quiet --disable-pip-version-check
 if errorlevel 1 (
-    echo [WARN] pip install had errors — check your internet connection.
+    echo [WARN] pip install had errors - check your internet connection.
     echo        Try manually: pip install -r requirements.txt
 )
 
@@ -54,7 +54,7 @@ echo.
 echo [3/4] Installing wvs command...
 pip install -e . --quiet --disable-pip-version-check
 if errorlevel 1 (
-    echo [WARN] Could not install wvs entry point — you can still use wvs.bat or python main.py
+    echo [WARN] Could not install wvs entry point - you can still use wvs.bat or python main.py
 )
 
 REM 5. Create config.py if missing
@@ -67,7 +67,7 @@ if not exist "config.py" (
         echo       Edit config.py to add API keys (OpenRouter/Groq/Gemini).
     )
 ) else (
-    echo       config.py already exists — skipping.
+    echo       config.py already exists - skipping.
 )
 
 REM 6. Verify
@@ -75,13 +75,13 @@ echo.
 echo Verifying...
 python -m py_compile main.py app.py >nul 2>&1
 if errorlevel 1 (
-    echo [WARN] Syntax check failed — run: python -m py_compile main.py
+    echo [WARN] Syntax check failed - run: python -m py_compile main.py
 ) else (
     echo [OK]  main.py and app.py compile clean.
 )
 python -c "import requests, bs4, jinja2" >nul 2>&1
 if errorlevel 1 (
-    echo [WARN] Some deps missing — run: pip install -r requirements.txt
+    echo [WARN] Some deps missing - run: pip install -r requirements.txt
 ) else (
     echo [OK]  Core dependencies OK.
 )
@@ -92,11 +92,11 @@ echo   Installation complete!
 echo ========================================
 echo.
 echo Next steps:
-echo   • CLI:  wvs --help  or  wvs.bat --help  or  python main.py --help
-echo   • UI:   Double-click ui.bat  (http://localhost:8501)
-echo   • Scan: wvs --url http://localhost/dvwa --src C:\xampp\htdocs\dvwa --ai-provider openrouter
+echo   * CLI:  wvs --help  or  wvs.bat --help  or  python main.py --help
+echo   * UI:   Double-click ui.bat  (http://localhost:8501)
+echo   * Scan: wvs --url http://localhost/dvwa --src C:\xampp\htdocs\dvwa --ai-provider openrouter
 echo.
-echo Free AI: OpenRouter (openrouter.ai/keys, no card) — 50 free req/day
+echo Free AI: OpenRouter (openrouter.ai/keys, no card) - 50 free req/day
 echo          Groq (console.groq.com, 14k/day) also free.
 echo.
 pause
