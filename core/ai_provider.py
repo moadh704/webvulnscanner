@@ -805,8 +805,30 @@ positive; assume it is real and provide the fix.
 Provide a specific remediation in 3 sentences maximum.
 Include a concrete code-level fix example if applicable.
 """
-        finding['remediation'] = self.provider.generate_remediation(prompt)
+        remediation = self.provider.generate_remediation(prompt)
         self.calls_made += 1
+        # Guard: some free reasoning models echo the task instructions instead
+        # of answering (e.g. "We need to provide remediation in max 3 sentences..."),
+        # or return an error fallback when rate-limited (e.g. "REAL (OpenRouter error: 429...)").
+        # Detect prompt leakage or provider errors and retry once with a minimal prompt;
+        # if it still fails, fall back to the static OWASP default.
+        _leak_markers = ("We need to provide", "3 sentences", "concrete code-level")
+        _is_leaked = remediation and any(m in remediation for m in _leak_markers)
+        _is_error  = remediation and ("OpenRouter error" in remediation or _is_error_response(remediation))
+        if _is_leaked or _is_error:
+            retry_prompt = (
+                f"Give a concise fix for {finding['type']} ({finding.get('owasp','')}) "
+                f"at {finding.get('url','')} parameter '{finding.get('parameter','')}'. "
+                f"Provide a short PHP code example using safe APIs."
+            )
+            remediation = self.provider.generate_remediation(retry_prompt)
+            self.calls_made += 1
+            if any(m in remediation for m in _leak_markers) or ("OpenRouter error" in remediation or _is_error_response(remediation)):
+                remediation = self._default_remediation(finding)
+        # Also fallback if the model returned nothing useful
+        if not remediation or len(remediation.strip()) < 20:
+            remediation = self._default_remediation(finding)
+        finding['remediation'] = remediation
         return finding
 
     def _default_remediation(self, finding: dict) -> str:

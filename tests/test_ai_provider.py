@@ -23,7 +23,7 @@ class _FakeProvider:
 
     def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         self.remed_calls += 1
-        return f"REMED-{self.remed_calls}"
+        return f"REMED-{self.remed_calls} - Use prepared statements to fix this vulnerability. See OWASP guidelines."
 
 
 def _make_type1_finding(idx: int) -> dict:
