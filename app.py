@@ -221,7 +221,6 @@ st.markdown("""
 <div class="hero">
     <h1>🔍 WebVuln<span>Scanner</span> <span style="font-size:14px;color:#3fb950;background:rgba(57,211,83,0.12);padding:3px 10px;border-radius:20px;border:1px solid rgba(57,211,83,0.3);">v1.0</span></h1>
     <p>Hybrid Web Vulnerability Scanner — Static + Dynamic + AI Analysis &nbsp;•&nbsp; OWASP Top 10 &nbsp;•&nbsp; Interactive triage</p>
-    <div class="hero-badge">● LIVE &nbsp; All 13 CLI fixes synced &nbsp;•&nbsp; OpenRouter free AI &nbsp;•&nbsp; Filterable reports</div>
 </div>
 """, unsafe_allow_html=True)
 
