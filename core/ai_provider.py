@@ -34,9 +34,55 @@ def _is_error_response(text: str) -> bool:
     Gemini/Ollama/DeepSeek use "REAL (... error: ...)", Groq falls back to
     a generic OWASP string.
     """
-    head = text[:60].lower()
-    return ('error:' in head or head.startswith('see owasp')
-            or 'error' in head and 'real' in head)
+    if not text:
+        return True
+    head = text[:120].lower()
+    if 'error:' in head or head.startswith('see owasp'):
+        return True
+    if 'error' in head and 'real' in head:
+        return True
+    return False
+
+
+def _classify_provider_error(text: str, provider: str = "AI") -> tuple[str, str]:
+    """
+    Convert a raw provider error into a friendly user-facing (message, action).
+    Returns (short_status, actionable_advice).
+    """
+    if not text:
+        return f"{provider} returned empty response", "Check provider status or try --no-ai."
+
+    lowered = text.lower()
+    if "429" in text or "rate limit" in lowered or "too many requests" in lowered:
+        return (
+            f"{provider} quota/rate limit reached",
+            "Wait 24h, switch to a provider with a free tier, or add credits. "
+            "You can also rerun with --no-ai for static remediations."
+        )
+    if "quota" in lowered or "insufficient" in lowered and "credit" in lowered:
+        return (
+            f"{provider} account quota exhausted",
+            "Add credits or switch provider. Rerun with --no-ai to skip AI."
+        )
+    if "unauthorized" in lowered or "invalid" in lowered and "key" in lowered:
+        return (
+            f"{provider} API key invalid or missing",
+            "Check the API key in config.py and try again."
+        )
+    if "model not found" in lowered or "not available" in lowered or "does not exist" in lowered:
+        return (
+            f"{provider} model unavailable",
+            "Pick a different model in config.py or via OPENROUTER_MODEL."
+        )
+    if "timeout" in lowered or "timed out" in lowered:
+        return (
+            f"{provider} request timed out",
+            "Network or provider is slow. Try again or use --no-ai."
+        )
+    return (
+        f"{provider} request failed",
+        "Try --no-ai for a static-only report, or check provider status."
+    )
 
 
 # ── Evidence quoting (prompt-injection guard) ─────────────────────────────────
@@ -97,7 +143,8 @@ class GeminiProvider(AIProvider):
             )
             return response.text
         except Exception as e:
-            return f"REAL (Gemini error: {e})"
+            status, _ = _classify_provider_error(str(e), "Gemini")
+            return f"REAL - {status}"
 
     def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
         try:
@@ -162,7 +209,8 @@ class OllamaProvider(AIProvider):
             )
             return r.json().get('response', '')
         except Exception as e:
-            return f"REAL (Ollama error: {e})"
+            status, _ = _classify_provider_error(str(e), "Ollama")
+            return f"REAL - {status}"
 
     def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt)
@@ -236,15 +284,18 @@ class DeepSeekProvider(AIProvider):
                     last_err = "empty content"
                     if attempt < 2:
                         continue
-                    return "REAL (DeepSeek error: empty response)"
+                    status, _ = _classify_provider_error("empty response", "DeepSeek")
+                    return f"REAL - {status}"
                 except Exception as e:
                     last_err = e
                     if attempt < 2:
                         import time
                         time.sleep(2 * (attempt + 1))
-            return f"REAL (DeepSeek error: {last_err})"
+            status, _ = _classify_provider_error(str(last_err), "DeepSeek")
+            return f"REAL - {status}"
         except Exception as e:
-            return f"REAL (DeepSeek error: {e})"
+            status, _ = _classify_provider_error(str(e), "DeepSeek")
+            return f"REAL - {status}"
 
     def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt, max_tokens)
@@ -313,15 +364,18 @@ class OpenRouterProvider(AIProvider):
                     last_err = "empty content"
                     if attempt < 2:
                         continue
-                    return "REAL (OpenRouter error: empty response)"
+                    status, _ = _classify_provider_error("empty response", "OpenRouter")
+                    return f"REAL - {status}"
                 except Exception as e:
                     last_err = e
                     if attempt < 2:
                         import time
                         time.sleep(2 * (attempt + 1))
-            return f"REAL (OpenRouter error: {last_err})"
+            status, _ = _classify_provider_error(str(last_err), "OpenRouter")
+            return f"REAL - {status}"
         except Exception as e:
-            return f"REAL (OpenRouter error: {e})"
+            status, _ = _classify_provider_error(str(e), "OpenRouter")
+            return f"REAL - {status}"
 
     def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt, max_tokens)
@@ -590,9 +644,11 @@ class AIEnhancer:
                 # string (e.g. "REAL (Groq error: 429 ...)", "REAL (OpenRouter error: ...)",
                 # or an empty/rate-limited response). If the batch itself failed,
                 # do not waste calls on per-item fallbacks that will also fail.
-                if not raw or _is_error_response(raw) or "429" in raw or "rate limit" in raw.lower() or "quota" in raw.lower():
-                    err_snip = (raw or "")[:80].replace("\n"," ")
-                    print(f"  [AI]   batch failed (provider error: {err_snip}...), keeping all as REAL (call #{self.calls_made})")
+                if not raw or _is_error_response(raw):
+                    provider_name = getattr(self.provider, '__class__', object).__name__.replace('Provider','')
+                    status, action = _classify_provider_error(raw or "", provider_name)
+                    print(f"  [AI]   batch failed ({status}), keeping all as REAL (call #{self.calls_made})")
+                    print(f"  [AI]   → {action}")
                     batch_failed = True
                     responses = {}
                     # Circuit breaker: rate-limited once → skip remaining AI
@@ -611,7 +667,8 @@ class AIEnhancer:
                 if batch_failed:
                     # Provider is rate-limited or down — keep as REAL without
                     # burning more calls on per-item retries that will also fail.
-                    line = "REAL - AI provider unavailable, kept as REAL"
+                    status, _ = _classify_provider_error(raw or "", getattr(self.provider, '__class__', object).__name__.replace('Provider',''))
+                    line = f"REAL - {status}"
                 else:
                     # Fallback: ask for this item alone.
                     print(f"  [AI]   fallback ask: {f.get('type')} @ "
