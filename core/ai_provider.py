@@ -512,6 +512,36 @@ class AIEnhancer:
         else:
             print(f"  [AI] Mode: hybrid/dynamic (strict review)")
 
+    def _preflight(self) -> bool:
+        """
+        One tiny, cheap call to verify the provider is reachable before we
+        spend calls on real review/remediation batches. Returns True if the
+        provider looks healthy, False if we should fall back to defaults.
+        """
+        if isinstance(self.provider, NoAIProvider) or self._rate_limited:
+            return False
+        try:
+            raw = self.provider.review_finding(
+                "Reply with exactly one word: PONG", max_tokens=10)
+            self.calls_made += 1
+            if raw and not _is_error_response(raw) and 'PONG' in raw.upper():
+                print(f"  [AI] Preflight OK (call #{self.calls_made})")
+                return True
+            provider_name = _provider_name(self.provider)
+            status, action = _classify_provider_error(raw or "", provider_name)
+            print(f"  [AI] Preflight failed ({status})")
+            print(f"  [AI] → {action}")
+            lowered = (raw or "").lower()
+            if any(k in lowered for k in ("429", "rate limit", "quota", "unauthorized", "invalid key", "model not found", "not available", "does not exist")):
+                self._rate_limited = True
+            return False
+        except Exception as e:
+            provider_name = _provider_name(self.provider)
+            status, action = _classify_provider_error(str(e), provider_name)
+            print(f"  [AI] Preflight failed ({status})")
+            print(f"  [AI] → {action}")
+            return False
+
     def enhance(self, findings: list) -> list:
         """Process all findings through the AI layer."""
         if isinstance(self.provider, NoAIProvider):
@@ -522,6 +552,15 @@ class AIEnhancer:
             return findings
 
         print(f"  [AI] Processing {len(findings)} finding(s)...")
+
+        # Step 0: Preflight — verify provider is reachable before spending
+        # real calls. If it fails, skip all AI and use defaults.
+        if not self._preflight():
+            print("  [AI] Skipping AI review/remediation — using defaults.")
+            for f in findings:
+                if f.get('status') != 'dismissed':
+                    f['remediation'] = self._default_remediation(f)
+            return findings
 
         # Step 1: Review — Type 2 candidates (static) and Type 3 detections
         # (dynamic, FP-prone classes only). Batch by vulnerability type;

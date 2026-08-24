@@ -18,7 +18,10 @@ class _FakeProvider:
 
     def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         self.review_calls += 1
-        # Return empty so the enhancer falls back to per-item review.
+        # Return PONG for preflight; empty for real reviews so the enhancer
+        # falls back to per-item review when needed.
+        if "PONG" in prompt.upper():
+            return "PONG"
         return ""
 
     def generate_remediation(self, prompt: str, max_tokens: int = 500) -> str:
@@ -63,9 +66,10 @@ def test_calls_made_counts_remediation_calls():
     result = enhancer.enhance(findings)
 
     # Type 1 findings are not reviewed, only remediated.
+    # calls_made includes 1 preflight check + 2 remediation calls.
     assert enhancer.provider.remed_calls == 2
-    assert enhancer.calls_made == 2, (
-        f"calls_made should be 2 (both remediations), got {enhancer.calls_made}"
+    assert enhancer.calls_made == 3, (
+        f"calls_made should be 3 (preflight + 2 remediations), got {enhancer.calls_made}"
     )
     assert all('REMED-' in f.get('remediation', '') for f in result)
 
@@ -81,8 +85,8 @@ def test_ai_max_remediations_caps_remediation_calls():
     assert enhancer.provider.remed_calls == 1, (
         f"expected 1 remediation call, got {enhancer.provider.remed_calls}"
     )
-    assert enhancer.calls_made == 1, (
-        f"expected calls_made == 1, got {enhancer.calls_made}"
+    assert enhancer.calls_made == 2, (
+        f"expected calls_made == 2 (preflight + 1 remediation), got {enhancer.calls_made}"
     )
     remediated = [f for f in result
                   if f.get('remediation', '').startswith('REMED-')]
