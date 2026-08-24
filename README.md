@@ -112,8 +112,13 @@ cd webvulnscanner
 **2. Install**
 
 ```bash
-setup.bat                # Windows — installs deps + CLI entry point
-# or manually:
+# Windows — double-click or run in cmd/powershell
+setup.bat
+
+# Linux / macOS
+bash setup.sh
+
+# Or manually on any platform:
 pip install -r requirements.txt
 pip install -e .         # optional: enables the wvs command
 ```
@@ -167,6 +172,10 @@ wvs --url http://localhost/dvwa \
 | `--no-ai` | Disable AI layer | AI on if configured |
 | `--timeout` | Request timeout (seconds) | config |
 | `--max-pages` | Crawl limit | config |
+| `--max-response-kb` | Cap response body size in KB (prevent OOM) | 2048 |
+| `--allow-subdomains` | Allow crawling subdomains of the target | off |
+| `--ai-max-findings` | Cap AI-reviewed findings by severity | 0 (all) |
+| `--ai-max-remediations` | Cap AI-generated remediations | 0 (all) |
 | `--report-name` | Custom report basename | auto |
 | `--verbose` / `--quiet` | Log detail | normal |
 
