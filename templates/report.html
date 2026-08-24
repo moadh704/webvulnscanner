@@ -126,6 +126,7 @@
         .evidence-block { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin: 8px 0; font-family: 'Courier New', monospace; font-size: 12px; color: #79c0ff; white-space: pre-wrap; word-break: break-all; }
         .remediation-block { background: rgba(63,185,80,0.05); border: 1px solid rgba(63,185,80,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 13px; color: var(--text); }
         .ai-note-block { background: rgba(240,192,64,0.05); border: 1px solid rgba(240,192,64,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 12px; color: var(--text); }
+        .ai-error-block { background: rgba(255,68,68,0.05); border: 1px solid rgba(255,68,68,0.2); border-radius: 6px; padding: 12px; margin: 8px 0; font-size: 12px; color: var(--text); }
 
         .field-label { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-top: 12px; margin-bottom: 4px; letter-spacing: 0.5px; }
 
@@ -265,6 +266,10 @@
             <div class="field-label">Dynamic Evidence</div>
             <div class="evidence-block">{{ f.evidence_dynamic | e }}</div>
             {% if f.payload %}<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Payload: <code style="color:#79c0ff;">{{ f.payload | e }}</code></div>{% endif %}
+            {% endif %}
+            {% if f.ai_error %}
+            <div class="field-label">AI Status</div>
+            <div class="ai-error-block">{{ f.ai_error | e }}</div>
             {% endif %}
             {% if f.ai_note %}
             <div class="field-label">AI Review Note</div>

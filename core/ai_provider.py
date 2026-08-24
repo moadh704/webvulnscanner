@@ -792,6 +792,11 @@ class AIEnhancer:
             # "REAL (Ollama error: ...)", Groq "See OWASP guidelines...".
             if line and not _is_error_response(line):
                 self.cache[f['_cache_key']] = line
+            elif line and _is_error_response(line):
+                # Surface provider errors cleanly in the report instead of
+                # polluting ai_note with raw error strings.
+                f['ai_error'] = line.strip()
+                f['ai_note'] = None
 
     def _review_static_batch(self, findings: list):
         by_type = {}
@@ -1031,6 +1036,11 @@ Include a concrete code-level fix example in {lang} if applicable.
                 remediation = self._default_remediation(finding)
         # Also fallback if the model returned nothing useful
         if not remediation or len(remediation.strip()) < 20:
+            remediation = self._default_remediation(finding)
+        # Record provider errors separately so the report can show them
+        # without polluting the remediation text.
+        if remediation and _is_error_response(remediation):
+            finding['ai_error'] = remediation.strip()
             remediation = self._default_remediation(finding)
         finding['remediation'] = remediation
         return finding
