@@ -207,6 +207,7 @@ Real output from a full hybrid scan of a **local DVWA lab** (security level: low
 | [HTML report](docs/examples/sample-report-dvwa.html) | `http://localhost/dvwa` | Full interactive report with severity charts, no AI |
 | [Results table](docs/examples/sample-results-dvwa.md) | `http://localhost/dvwa` | Readable findings summary from the same run |
 | [JSON](docs/examples/sample-report-dvwa.json) | `http://localhost/dvwa` | Machine-readable, for tooling demos |
+| [Full hybrid + free AI](docs/examples/sample-report-dvwa-full-ai.html) | `http://localhost/dvwa` | All 6 modules with live OpenRouter free-tier AI (48 findings, 8 FPs dismissed by AI) |
 | [OpenRouter AI](docs/examples/sample-report-dvwa-openrouter.html) | `http://localhost/dvwa` | Hybrid + OpenRouter AI (41 findings, 15 dismissed) — free, no card |
 | [bWAPP XSS](docs/examples/sample-report-bwapp-xss.html) | `http://localhost/bWAPP/xss_get.php` | Focused reflected XSS run |
 
