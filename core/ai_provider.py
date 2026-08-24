@@ -59,6 +59,32 @@ def _provider_name(provider) -> str:
     return name.replace('Provider', '')
 
 
+def _detect_language(finding: dict) -> str:
+    """
+    Infer the application's implementation language from the finding so
+    remediation examples can be specific instead of assuming PHP.
+    """
+    text = ""
+    file = finding.get('file') or ''
+    url  = finding.get('url') or ''
+    evidence = (finding.get('evidence_static') or '')[:2000]
+    text = f"{file} {url} {evidence}".lower()
+
+    rules = [
+        ('PHP',       ['.php', '<?php', '<?=', 'php']),
+        ('Python',    ['.py', 'def ', 'import ', 'django', 'flask']),
+        ('Node.js',   ['.js', '.ts', 'app.use', 'require(', 'express', 'node']),
+        ('Java',      ['.java', 'public class', 'spring']),
+        ('Go',        ['.go', 'package main', 'fmt.']),
+        ('Ruby',      ['.rb', 'rails', 'def ', 'ruby']),
+        ('C#',        ['.cs', 'namespace ', 'asp.net', 'iactionresult']),
+    ]
+    for lang, markers in rules:
+        if any(m in text for m in markers):
+            return lang
+    return 'the application language'
+
+
 def _classify_provider_error(text: str, provider: str = "AI") -> tuple[str, str]:
     """
     Convert a raw provider error into a friendly user-facing (message, action).
@@ -914,11 +940,13 @@ Reply with exactly one line per item, format:
         verdict = (finding.get('ai_note') or '').strip()
         if verdict:
             verdict = f"Reviewer verdict: {verdict}\n"
+        lang = _detect_language(finding)
         prompt = f"""A {finding['type']} vulnerability (OWASP {finding['owasp']}) \
 was detected with the following evidence:
 
 URL            : {finding.get('url', 'N/A')}
 Parameter      : {finding.get('parameter', 'N/A')}
+Language       : {lang}
 {static_ev}
 {dynamic_ev}
 Confidence     : {finding.get('confidence', 0)} \
@@ -930,7 +958,7 @@ by an automated reviewer — do not re-evaluate whether it is a false
 positive; assume it is real and provide the fix.
 {verdict}
 Provide a specific remediation in 3 sentences maximum.
-Include a concrete code-level fix example if applicable.
+Include a concrete code-level fix example in {lang} if applicable.
 """
         remediation = self.provider.generate_remediation(prompt)
         self.calls_made += 1
@@ -952,7 +980,7 @@ Include a concrete code-level fix example if applicable.
             retry_prompt = (
                 f"Give a concise fix for {finding['type']} ({finding.get('owasp','')}) "
                 f"at {finding.get('url','')} parameter '{finding.get('parameter','')}'. "
-                f"Provide a short PHP code example using safe APIs."
+                f"Provide a short code example in {lang} using safe APIs."
             )
             remediation = self.provider.generate_remediation(retry_prompt)
             self.calls_made += 1
@@ -975,7 +1003,8 @@ Include a concrete code-level fix example if applicable.
                           "Never concatenate user input into SQL strings. "
                           "See: https://owasp.org/www-community/attacks/SQL_Injection"),
             'xss'      : ("Encode all user input before rendering in HTML. "
-                          "Use htmlspecialchars() in PHP or equivalent. "
+                          "Use a context-appropriate encoder (e.g., htmlspecialchars() in PHP, "
+                          "Jinja2 autoescape in Python, React JSX escaping in Node.js). "
                           "See: https://owasp.org/www-community/attacks/xss/"),
             'cmdi'     : ("Never pass user input to OS command functions. "
                           "Use escapeshellarg() if shell calls are unavoidable. "
