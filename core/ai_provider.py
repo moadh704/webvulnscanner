@@ -657,13 +657,30 @@ class AIEnhancer:
 
     @staticmethod
     def _parse_batch(raw: str) -> dict:
-        """Parse 'Item <N>: <response>' lines into {N: response}.
+        """Parse batch verdicts into {N: response}.
 
-        Tolerates common model variants such as '1. REAL', '1) REAL',
-        'Item 1 - REAL', and numbered lists.
+        First try JSON (preferred because prompts now request it), then
+        fall back to legacy 'Item N:' / numbered-list formats for models
+        that do not follow JSON instructions.
         """
         out = {}
-        # Primary: explicit "Item N:" format
+        # 1. JSON mode: look for a JSON object in the response
+        try:
+            # Some models wrap JSON in markdown fences; strip them.
+            cleaned = re.sub(r'^```(?:json)?\s*|\s*```$', '', raw.strip(), flags=re.M)
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                for k, v in parsed.items():
+                    try:
+                        out[int(k)] = str(v).strip()
+                    except (ValueError, TypeError):
+                        pass
+                if out:
+                    return out
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        # 2. Legacy: explicit "Item N:" format
         for m in re.finditer(
                 r'Item\s*(\d+)\s*[:\-)]\s*(.+?)(?=Item\s*\d+\s*[:\-)]|\Z)',
                 raw, re.S | re.I):
@@ -671,7 +688,7 @@ class AIEnhancer:
                 out[int(m.group(1))] = m.group(2).strip()
             except ValueError:
                 pass
-        # Fallback: numbered list lines like "1. REAL", "1) FALSE_POSITIVE"
+        # 3. Legacy: numbered list lines like "1. REAL", "1) FALSE_POSITIVE"
         if not out:
             for m in re.finditer(
                     r'^(?:\s*[-*])?\s*(\d+)\s*[.:\)]\s*(.+?)$',
@@ -826,30 +843,20 @@ class AIEnhancer:
 
     def _static_batch_prompt(self, findings: list, vuln_type: str) -> str:
         body = "\n\n".join(self._static_item_text(f) for f in findings)
-        if self.static_only_mode:
-            return f"""A static code scanner flagged {len(findings)} \
-potential {vuln_type} vulnerabilities for code-review triage:
-
-{body}
-
-This scan is in STATIC-ONLY mode — no runtime confirmation is available.
-For each item decide RETAIN (keep for review) or NOT_VULNERABLE (clearly safe).
-Be lenient: when in doubt, retain.
-Reply with exactly one line per item, format:
-"Item <N>: RETAIN|NOT_VULNERABLE — <one sentence>".
-"""
+        labels = "RETAIN|NOT_VULNERABLE" if self.static_only_mode else "REAL|FALSE_POSITIVE"
         return f"""A static code scanner flagged {len(findings)} potential \
-{vuln_type} vulnerabilities (OWASP {findings[0].get('owasp', '')}):
+{vuln_type} vulnerabilities for code-review triage.
 
 {body}
 
-This scan is in HYBRID mode — dynamic injection was attempted at the
-corresponding endpoints but did NOT confirm exploitation.
-For each item decide REAL (still a vulnerability, e.g. dynamically reachable
-but not exploited by our payloads) or FALSE_POSITIVE (e.g. sanitized, dead
-code, or unreachable).
-Reply with exactly one line per item, format:
-"Item <N>: REAL|FALSE_POSITIVE — <one sentence>".
+This scan is in {'STATIC-ONLY' if self.static_only_mode else 'HYBRID'} mode.
+For each item decide {labels}.
+{'Be lenient: when in doubt, retain.' if self.static_only_mode else 'Be strict: without dynamic confirmation, assume FALSE_POSITIVE unless the code is clearly reachable and unsafe.'}
+
+Reply ONLY with a JSON object where keys are item numbers and values are the verdict, e.g.:
+{{"1": "{labels.split('|')[0]}", "2": "{labels.split('|')[1]}"}}
+
+Do not include markdown, explanations, or any text outside the JSON.
 """
 
     def _dynamic_item_text(self, f: dict) -> str:
@@ -871,8 +878,11 @@ vulnerabilities (OWASP {findings[0].get('owasp', '')}):
 {self._dynamic_guidance(vuln_type)}
 
 For each item decide REAL or FALSE_POSITIVE.
-Reply with exactly one line per item, format:
-"Item <N>: REAL|FALSE_POSITIVE — <one sentence>".
+
+Reply ONLY with a JSON object where keys are item numbers and values are the verdict, e.g.:
+{{"1": "REAL", "2": "FALSE_POSITIVE"}}
+
+Do not include markdown, explanations, or any text outside the JSON.
 """
 
     def _dynamic_guidance(self, vuln: str) -> str:
