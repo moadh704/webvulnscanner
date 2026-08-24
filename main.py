@@ -453,6 +453,22 @@ def parse_args():
         "--quiet", action="store_true",
         help="Suppress all output except findings summary"
     )
+    parser.add_argument(
+        "--allow-subdomains", action="store_true",
+        help="Allow crawling of subdomains (default: exact host only)"
+    )
+    parser.add_argument(
+        "--max-response-kb", type=int, default=None,
+        help="Cap response body size in KB to prevent OOM\nExample: --max-response-kb 2048"
+    )
+    parser.add_argument(
+        "--ai-max-findings", type=int, default=None,
+        help="Cap how many findings are sent to AI review by severity\nExample: --ai-max-findings 20"
+    )
+    parser.add_argument(
+        "--ai-max-remediations", type=int, default=None,
+        help="Cap how many AI-generated remediations are requested\nExample: --ai-max-remediations 10"
+    )
 
     return parser.parse_args()
 
@@ -487,6 +503,14 @@ def validate_args(args):
         config.REQUEST_TIMEOUT = args.timeout
     if args.max_pages:
         config.MAX_CRAWL_PAGES = args.max_pages
+    if args.max_response_kb is not None:
+        config.MAX_RESPONSE_BYTES = args.max_response_kb * 1024
+    if args.ai_max_findings is not None:
+        config.AI_MAX_FINDINGS = args.ai_max_findings
+    if args.ai_max_remediations is not None:
+        config.AI_MAX_REMEDIATIONS = args.ai_max_remediations
+    if args.allow_subdomains:
+        config.ALLOW_SUBDOMAINS = True
 
     # Store output format in config for reporter
     config.OUTPUT_FORMAT = args.output_format

@@ -370,6 +370,11 @@ def build_command():
     cmd.extend(["--timeout", str(timeout)])
     cmd.extend(["--max-pages", str(max_pages)])
     cmd.extend(["--output-format", output_format])
+    cmd.extend(["--max-response-kb", str(max_response)])
+    cmd.extend(["--ai-max-findings", str(int(ai_max_findings))])
+    cmd.extend(["--ai-max-remediations", str(int(ai_max_remed))])
+    if allow_subdomains:
+        cmd.append("--allow-subdomains")
     # These are config-only today — we inject via env so the scan picks them up
     # (main.py reads config, but we can also override via env prefix if needed; for now we just ensure config.py has defaults)
     report_name = f"ui_scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -381,6 +386,50 @@ def build_command():
     return cmd, report_name
 
 def sev_order(s): return {"critical":0,"high":1,"medium":2,"low":3}.get(s.lower(), 9)
+
+def _render_metrics(scan_info, summary):
+    cols = st.columns(8)
+    metrics = [
+        ("Total",     scan_info.get("total", 0),        "total"),
+        ("Critical",  summary.get("critical", 0),       "critical"),
+        ("High",      summary.get("high", 0),           "high"),
+        ("Medium",    summary.get("medium", 0),         "medium"),
+        ("Low",       summary.get("low", 0),            "low"),
+        ("Verified",  summary.get("type1", 0),          "verified"),
+        ("Candidate", summary.get("type2", 0),          "candidate"),
+        ("Detected",  summary.get("type3", 0),          "detected"),
+    ]
+    for col, (label, count, css_class) in zip(cols, metrics):
+        with col:
+            st.markdown(f"""
+            <div class="metric-card {css_class}">
+                <div class="count">{count}</div>
+                <div class="label">{label}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+
+def _evidence_language(finding: dict) -> str:
+    """Pick a Streamlit code-block language from the finding evidence."""
+    file = (finding.get("file") or "").lower()
+    url  = (finding.get("url") or "").lower()
+    evidence = (finding.get("evidence_static") or "")[:500].lower()
+    if ".php" in file or ".php" in url or "<?php" in evidence:
+        return "php"
+    if ".py" in file or ".py" in url or "def " in evidence:
+        return "python"
+    if ".js" in file or ".ts" in file or ".js" in url or ".ts" in url:
+        return "javascript"
+    if ".java" in file or ".java" in url:
+        return "java"
+    if ".go" in file or ".go" in url:
+        return "go"
+    if ".rb" in file or ".rb" in url:
+        return "ruby"
+    if ".cs" in file or ".cs" in url:
+        return "csharp"
+    return "text"
+
 
 def display_findings(findings, key_prefix=""):
     """Streamlit-native findings with filter/sort/triage."""
@@ -470,12 +519,14 @@ def display_findings(findings, key_prefix=""):
 
             if f.get("evidence_static"):
                 st.markdown("**Static Evidence**")
-                st.code(f.get("evidence_static"), language="php")
+                st.code(f.get("evidence_static"), language=_evidence_language(f))
             if f.get("evidence_dynamic"):
                 st.markdown("**Dynamic Evidence**")
                 st.code(f.get("evidence_dynamic"), language="text")
                 if f.get("payload"):
                     st.markdown(f"**Payload:** `{f.get('payload')}`")
+            if f.get("ai_error"):
+                st.warning(f"**AI Status:** {f.get('ai_error')}")
             if f.get("ai_note"):
                 st.info(f"**AI Review:** {f.get('ai_note')}")
             if f.get("remediation"):
@@ -572,25 +623,7 @@ if scan_button and history_choice == "(new scan)":
 
                     # ── Summary Metrics ────────────────────────────────
                     st.markdown("### 📊 Scan Summary")
-                    cols = st.columns(8)
-                    metrics = [
-                        ("Total",     scan_info.get("total", 0),        "total"),
-                        ("Critical",  summary.get("critical", 0),       "critical"),
-                        ("High",      summary.get("high", 0),           "high"),
-                        ("Medium",    summary.get("medium", 0),         "medium"),
-                        ("Low",       summary.get("low", 0),            "low"),
-                        ("Verified",  summary.get("type1", 0),          "verified"),
-                        ("Candidate", summary.get("type2", 0),          "candidate"),
-                        ("Detected",  summary.get("type3", 0),          "detected"),
-                    ]
-                    for col, (label, count, css_class) in zip(cols, metrics):
-                        with col:
-                            st.markdown(f"""
-                            <div class="metric-card {css_class}">
-                                <div class="count">{count}</div>
-                                <div class="label">{label}</div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                    _render_metrics(scan_info, summary)
 
                     # ── Charts ──────────────────────────────────────────
                     if findings:
@@ -614,15 +647,13 @@ if scan_button and history_choice == "(new scan)":
 
                     # ── Downloads & Preview ─────────────────────────────
                     st.markdown("### 📥 Reports")
-                    col1, col2, col3 = st.columns(3)
+                    col1, col2 = st.columns(2)
                     if html_path.exists():
                         with open(html_path, 'rb') as fp:
                             col1.download_button("📄 HTML", data=fp.read(), file_name=html_path.name, mime="text/html", use_container_width=True)
                     if json_path.exists():
                         with open(json_path, 'rb') as fp:
                             col2.download_button("📋 JSON", data=fp.read(), file_name=json_path.name, mime="application/json", use_container_width=True)
-                    # PDF stub — HTML print is the practical PDF
-                    col3.download_button("🖨️ Print to PDF", data=open(html_path,'rb').read() if html_path.exists() else b"", file_name=html_path.name.replace(".html",".pdf") if html_path.exists() else "report.pdf", mime="application/pdf", use_container_width=True, help="Open HTML and print to PDF — styled for print")
 
                     if html_path.exists():
                         with st.expander("👁️ Preview HTML Report", expanded=False):
@@ -654,20 +685,7 @@ elif history_choice != "(new scan)":
         findings = data.get("findings", [])
         st.caption(f"Target: {scan_info.get('target_url','-')} • {scan_info.get('date','-')} • {scan_info.get('ai_provider','-')} • {scan_info.get('total',0)} findings")
 
-        cols = st.columns(8)
-        metrics = [
-            ("Total",     scan_info.get("total", 0),        "total"),
-            ("Critical",  summary.get("critical", 0),       "critical"),
-            ("High",      summary.get("high", 0),           "high"),
-            ("Medium",    summary.get("medium", 0),         "medium"),
-            ("Low",       summary.get("low", 0),            "low"),
-            ("Verified",  summary.get("type1", 0),          "verified"),
-            ("Candidate", summary.get("type2", 0),          "candidate"),
-            ("Detected",  summary.get("type3", 0),          "detected"),
-        ]
-        for col, (label, count, css_class) in zip(cols, metrics):
-            with col:
-                st.markdown(f'<div class="metric-card {css_class}"><div class="count">{count}</div><div class="label">{label}</div></div>', unsafe_allow_html=True)
+        _render_metrics(scan_info, summary)
 
         if findings:
             c1, c2 = st.columns(2)
@@ -706,17 +724,16 @@ else:
     """)
     c1, c2, c3 = st.columns(3)
     feats = [
-        ("🎯 Hybrid", "Static + dynamic fused into one report", "5 Type-1 verified in last DVWA scan"),
-        ("🤖 Free AI", "OpenRouter 35+ free models, Groq 14k/day, no card", "41 findings, 15 dismissed (openrouter)"),
-        ("🎨 Triage", "Filter, search, sort, dismiss, history", "New filter bar in HTML + Streamlit"),
+        ("🎯 Hybrid", "Static source analysis + dynamic injection testing in one report."),
+        ("🤖 AI Triage", "Optional AI review for false positives and language-aware remediation advice."),
+        ("🎨 Interactive", "Filter, search, sort, dismiss, and export findings from the browser."),
     ]
-    for col, (title, desc, foot) in zip([c1,c2,c3], feats):
+    for col, (title, desc) in zip([c1,c2,c3], feats):
         with col:
             st.markdown(f"""
             <div style="background: linear-gradient(145deg, #161b22, #1c2128); border: 1px solid #30363d; border-radius: 12px; padding: 18px; margin-bottom: 12px;">
                 <div style="color: #58a6ff; font-weight: 800; font-size: 14px;">{title}</div>
                 <div style="color: #e6edf3; font-size: 13px; margin-top: 6px;">{desc}</div>
-                <div style="color: #8b949e; font-size: 11px; margin-top: 8px;">{foot}</div>
             </div>
             """, unsafe_allow_html=True)
 
@@ -746,7 +763,6 @@ st.markdown("---")
 st.markdown(
     "<div style='text-align: center; color: #8b949e; font-size: 11px;'>"
     "WebVulnScanner v1.0 — Hybrid Web Vulnerability Scanner &nbsp;•&nbsp; "
-    "All recent CLI fixes synced &nbsp;•&nbsp; OpenRouter free AI &nbsp;•&nbsp; "
     "<a href='https://github.com/moadh704/webvulnscanner' style='color:#58a6ff;'>GitHub</a>"
     "</div>",
     unsafe_allow_html=True
