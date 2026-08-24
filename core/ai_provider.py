@@ -514,15 +514,20 @@ class AIEnhancer:
 
     def _preflight(self) -> bool:
         """
-        One tiny, cheap call to verify the provider is reachable before we
+        One tiny call to verify the provider is reachable before we
         spend calls on real review/remediation batches. Returns True if the
         provider looks healthy, False if we should fall back to defaults.
+
+        max_tokens is generous (200) because many free "reasoning" models
+        spend output tokens on hidden thinking BEFORE writing content — with
+        a tiny budget they finish with finish_reason=length and empty
+        content, which would falsely trip the preflight.
         """
         if isinstance(self.provider, NoAIProvider) or self._rate_limited:
             return False
         try:
             raw = self.provider.review_finding(
-                "Reply with exactly one word: PONG", max_tokens=10)
+                "Reply with exactly one word: PONG", max_tokens=200)
             self.calls_made += 1
             if raw and not _is_error_response(raw) and raw.strip():
                 print(f"  [AI] Preflight OK (call #{self.calls_made})")

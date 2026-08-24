@@ -227,6 +227,7 @@ st.markdown("""
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 OPENROUTER_FREE_MODELS = [
+    "openrouter/free",
     "cohere/north-mini-code:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
