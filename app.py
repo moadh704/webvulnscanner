@@ -227,16 +227,10 @@ st.markdown("""
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 OPENROUTER_FREE_MODELS = [
-    "nvidia/nemotron-3-nano-30b-a3b:free",
-    "liquid/lfm-2.5-2.6b:free",
+    "cohere/north-mini-code:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "google/gemma-4-31b-it:free",
-    "cohere/north-mini-code:free",
-    "z-ai/glm-5.2:free",
     "dots-studio/dots-3-note-preview:free",
-    "nvidia/nemotron-nano-12b-v2-vl:free",
 ]
 
 # ── Sidebar — Scan Configuration ──────────────────────────────────────────────

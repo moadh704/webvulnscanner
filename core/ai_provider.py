@@ -524,7 +524,7 @@ class AIEnhancer:
             raw = self.provider.review_finding(
                 "Reply with exactly one word: PONG", max_tokens=10)
             self.calls_made += 1
-            if raw and not _is_error_response(raw) and 'PONG' in raw.upper():
+            if raw and not _is_error_response(raw) and raw.strip():
                 print(f"  [AI] Preflight OK (call #{self.calls_made})")
                 return True
             provider_name = _provider_name(self.provider)
