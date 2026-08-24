@@ -31,17 +31,32 @@ def _is_error_response(text: str) -> bool:
     True when a provider response is an error fallback rather than a real
     verdict — these must never be cached, or a transient outage would
     poison every future scan. Providers signal failures differently:
-    Gemini/Ollama/DeepSeek use "REAL (... error: ...)", Groq falls back to
-    a generic OWASP string.
+      - Gemini/Ollama/DeepSeek/OpenRouter: "REAL - <provider> <error>"
+      - Groq: generic "See OWASP guidelines..."
+      - any empty response
     """
-    if not text:
+    if not text or not text.strip():
         return True
     head = text[:120].lower()
-    if 'error:' in head or head.startswith('see owasp'):
+    if head.startswith('see owasp'):
+        return True
+    # New friendly error format: "REAL - OpenRouter quota/rate limit reached"
+    if text.strip().upper().startswith('REAL -'):
+        return True
+    # Legacy error strings (keep for compatibility)
+    if 'error:' in head:
         return True
     if 'error' in head and 'real' in head:
         return True
     return False
+
+
+def _provider_name(provider) -> str:
+    """Return a clean provider label (e.g. 'OpenRouter', 'Gemini')."""
+    if provider is None:
+        return "AI"
+    name = getattr(provider, '__class__', object).__name__
+    return name.replace('Provider', '')
 
 
 def _classify_provider_error(text: str, provider: str = "AI") -> tuple[str, str]:
@@ -153,8 +168,8 @@ class GeminiProvider(AIProvider):
             )
             return response.text
         except Exception as e:
-            print(f"  [AI] Gemini error: {e}")
-            return "See OWASP guidelines for remediation guidance."
+            status, _ = _classify_provider_error(str(e), "Gemini")
+            return f"REAL - {status}"
 
 
 # ── Groq Provider (free, high limits) ────────────────────────────────────────
@@ -180,7 +195,8 @@ class GroqProvider(AIProvider):
             )
             return response.choices[0].message.content
         except Exception as e:
-            return f"See OWASP guidelines for remediation guidance."
+            status, _ = _classify_provider_error(str(e), "Groq")
+            return f"REAL - {status}"
 
     def review_finding(self, prompt: str, max_tokens: int = 500) -> str:
         return self._call(prompt, max_tokens)
@@ -576,15 +592,29 @@ class AIEnhancer:
 
     @staticmethod
     def _parse_batch(raw: str) -> dict:
-        """Parse 'Item <N>: <response>' lines into {N: response}."""
+        """Parse 'Item <N>: <response>' lines into {N: response}.
+
+        Tolerates common model variants such as '1. REAL', '1) REAL',
+        'Item 1 - REAL', and numbered lists.
+        """
         out = {}
+        # Primary: explicit "Item N:" format
         for m in re.finditer(
-                r'Item\s*(\d+)\s*:\s*(.+?)(?=Item\s*\d+\s*:|\Z)',
+                r'Item\s*(\d+)\s*[:\-)]\s*(.+?)(?=Item\s*\d+\s*[:\-)]|\Z)',
                 raw, re.S | re.I):
             try:
                 out[int(m.group(1))] = m.group(2).strip()
             except ValueError:
                 pass
+        # Fallback: numbered list lines like "1. REAL", "1) FALSE_POSITIVE"
+        if not out:
+            for m in re.finditer(
+                    r'^(?:\s*[-*])?\s*(\d+)\s*[.:\)]\s*(.+?)$',
+                    raw, re.M | re.I):
+                try:
+                    out[int(m.group(1))] = m.group(2).strip()
+                except ValueError:
+                    pass
         return out
 
     SEV_WEIGHT = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3}
@@ -645,20 +675,27 @@ class AIEnhancer:
                 # or an empty/rate-limited response). If the batch itself failed,
                 # do not waste calls on per-item fallbacks that will also fail.
                 if not raw or _is_error_response(raw):
-                    provider_name = getattr(self.provider, '__class__', object).__name__.replace('Provider','')
+                    provider_name = _provider_name(self.provider)
                     status, action = _classify_provider_error(raw or "", provider_name)
                     print(f"  [AI]   batch failed ({status}), keeping all as REAL (call #{self.calls_made})")
                     print(f"  [AI]   → {action}")
                     batch_failed = True
                     responses = {}
-                    # Circuit breaker: rate-limited once → skip remaining AI
-                    if "429" in (raw or "") or "rate limit" in (raw or "").lower() or "quota" in (raw or "").lower():
+                    # Circuit breaker: auth/model/rate/quota errors are not
+                    # transient — skip remaining AI to avoid wasted calls.
+                    lowered = (raw or "").lower()
+                    if any(k in lowered for k in ("429", "rate limit", "quota", "unauthorized", "invalid key", "model not found", "not available", "does not exist")):
                         self._rate_limited = True
-                        print(f"  [AI]   Rate limit detected — skipping remaining AI reviews, using defaults.")
+                        print(f"  [AI]   Provider error detected — skipping remaining AI reviews, using defaults.")
                 else:
                     responses = self._parse_batch(raw)
-                    print(f"  [AI]   batch replied {len(responses)}/{len(uncached)} "
+                    answered = len(responses)
+                    print(f"  [AI]   batch replied {answered}/{len(uncached)} "
                           f"items (call #{self.calls_made})")
+                    if answered < len(uncached):
+                        missing = len(uncached) - answered
+                        print(f"  [AI]   warning: {missing} item(s) not parsed; "
+                              f"will try individual fallback")
 
         for f in batch:
             line = (cached_lines.get(f['_batch_idx'])
@@ -667,7 +704,7 @@ class AIEnhancer:
                 if batch_failed:
                     # Provider is rate-limited or down — keep as REAL without
                     # burning more calls on per-item retries that will also fail.
-                    status, _ = _classify_provider_error(raw or "", getattr(self.provider, '__class__', object).__name__.replace('Provider',''))
+                    status, _ = _classify_provider_error(raw or "", _provider_name(self.provider))
                     line = f"REAL - {status}"
                 else:
                     # Fallback: ask for this item alone.
@@ -904,20 +941,14 @@ Include a concrete code-level fix example if applicable.
         # if it still fails, fall back to the static OWASP default.
         _leak_markers = ("We need to provide", "3 sentences", "concrete code-level")
         _is_leaked = remediation and any(m in remediation for m in _leak_markers)
-        _is_error  = remediation and (
-            _is_error_response(remediation)
-            or "429" in remediation
-            or "rate limit" in remediation.lower()
-            or "quota" in remediation.lower()
-            or "exceeded" in remediation.lower()
-            or "unauthorized" in remediation.lower()
-            or "invalid" in remediation.lower() and "key" in remediation.lower()
-        )
+        _is_error  = remediation and _is_error_response(remediation)
         if _is_leaked or _is_error:
-            # Circuit breaker for rate limits — no point retrying if quota is exhausted
-            if _is_error and ("429" in (remediation or "") or "rate limit" in (remediation or "").lower() or "quota" in (remediation or "").lower()):
+            lowered = (remediation or "").lower()
+            # Circuit breaker: any provider error (rate-limit, bad key, model
+            # unavailable) means the rest will likely fail too.
+            if _is_error and any(k in lowered for k in ("429", "rate limit", "quota", "unauthorized", "invalid key", "model not found", "not available", "does not exist")):
                 self._rate_limited = True
-                print(f"  [AI]   Rate limit during remediation — remaining will use defaults.")
+                print(f"  [AI]   Provider error during remediation — remaining will use defaults.")
             retry_prompt = (
                 f"Give a concise fix for {finding['type']} ({finding.get('owasp','')}) "
                 f"at {finding.get('url','')} parameter '{finding.get('parameter','')}'. "
@@ -926,13 +957,8 @@ Include a concrete code-level fix example if applicable.
             remediation = self.provider.generate_remediation(retry_prompt)
             self.calls_made += 1
             _retry_leaked = any(m in remediation for m in _leak_markers) if remediation else False
-            _retry_error  = remediation and (
-                _is_error_response(remediation)
-                or "429" in remediation
-                or "rate limit" in remediation.lower()
-                or "quota" in remediation.lower()
-            )
-            if _retry_error and ("429" in (remediation or "") or "rate limit" in (remediation or "").lower() or "quota" in (remediation or "").lower()):
+            _retry_error  = remediation and _is_error_response(remediation)
+            if _retry_error and any(k in (remediation or "").lower() for k in ("429", "rate limit", "quota", "unauthorized", "invalid key", "model not found", "not available", "does not exist")):
                 self._rate_limited = True
             if _retry_leaked or _retry_error:
                 remediation = self._default_remediation(finding)
