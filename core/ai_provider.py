@@ -408,6 +408,7 @@ class AIEnhancer:
         self.cache      = self._load_cache()
         self.calls_made = 0
         self.cache_hits = 0
+        self._rate_limited = False  # circuit breaker for any provider
         provider_label = (config.AI_PROVIDER or "").strip() or "none"
         print(f"  [AI] Provider: {provider_label}")
         if self.static_only_mode:
@@ -570,31 +571,57 @@ class AIEnhancer:
               f"{len(batch)} item(s), {len(uncached)} to ask "
               f"({len(cached_lines)} cache hit(s))")
         responses = {}
+        batch_failed = False
         if uncached:
             if kind == 'static':
                 prompt = self._static_batch_prompt(uncached, vuln_type)
             else:
                 prompt = self._dynamic_batch_prompt(uncached, vuln_type)
-            raw = self.provider.review_finding(
-                prompt, max_tokens=min(4000, 500 + 350 * len(uncached)))
-            self.calls_made += 1
-            responses = self._parse_batch(raw)
-            print(f"  [AI]   batch replied {len(responses)}/{len(uncached)} "
-                  f"items (call #{self.calls_made})")
+            # If provider was already rate-limited, skip the call entirely
+            if self._rate_limited:
+                print(f"  [AI]   batch '{vuln_type}': skipped (provider rate-limited)")
+                batch_failed = True
+                responses = {}
+            else:
+                raw = self.provider.review_finding(
+                    prompt, max_tokens=min(4000, 500 + 350 * len(uncached)))
+                self.calls_made += 1
+                # General API error detection: any provider can return an error
+                # string (e.g. "REAL (Groq error: 429 ...)", "REAL (OpenRouter error: ...)",
+                # or an empty/rate-limited response). If the batch itself failed,
+                # do not waste calls on per-item fallbacks that will also fail.
+                if not raw or _is_error_response(raw) or "429" in raw or "rate limit" in raw.lower() or "quota" in raw.lower():
+                    err_snip = (raw or "")[:80].replace("\n"," ")
+                    print(f"  [AI]   batch failed (provider error: {err_snip}...), keeping all as REAL (call #{self.calls_made})")
+                    batch_failed = True
+                    responses = {}
+                    # Circuit breaker: rate-limited once → skip remaining AI
+                    if "429" in (raw or "") or "rate limit" in (raw or "").lower() or "quota" in (raw or "").lower():
+                        self._rate_limited = True
+                        print(f"  [AI]   Rate limit detected — skipping remaining AI reviews, using defaults.")
+                else:
+                    responses = self._parse_batch(raw)
+                    print(f"  [AI]   batch replied {len(responses)}/{len(uncached)} "
+                          f"items (call #{self.calls_made})")
 
         for f in batch:
             line = (cached_lines.get(f['_batch_idx'])
                     or responses.get(f['_batch_idx']))
             if line is None:
-                # Fallback: ask for this item alone.
-                print(f"  [AI]   fallback ask: {f.get('type')} @ "
-                      f"{(f.get('url') or f.get('file', '?'))[:60]}")
-                if kind == 'static':
-                    prompt = self._static_batch_prompt([f], vuln_type)
+                if batch_failed:
+                    # Provider is rate-limited or down — keep as REAL without
+                    # burning more calls on per-item retries that will also fail.
+                    line = "REAL - AI provider unavailable, kept as REAL"
                 else:
-                    prompt = self._dynamic_batch_prompt([f], vuln_type)
-                line = self.provider.review_finding(prompt, max_tokens=1500)
-                self.calls_made += 1
+                    # Fallback: ask for this item alone.
+                    print(f"  [AI]   fallback ask: {f.get('type')} @ "
+                          f"{(f.get('url') or f.get('file', '?'))[:60]}")
+                    if kind == 'static':
+                        prompt = self._static_batch_prompt([f], vuln_type)
+                    else:
+                        prompt = self._dynamic_batch_prompt([f], vuln_type)
+                    line = self.provider.review_finding(prompt, max_tokens=1500)
+                    self.calls_made += 1
             if kind == 'static':
                 self._apply_static_verdict(f, line)
             else:
@@ -782,6 +809,10 @@ Reply with exactly one line per item, format:
 
     def _generate_remediation(self, finding: dict) -> dict:
         """Generate context-specific remediation advice."""
+        # If provider was rate-limited earlier, skip AI and use default immediately
+        if getattr(self, '_rate_limited', False):
+            finding['remediation'] = self._default_remediation(finding)
+            return finding
         static_ev  = _quote_evidence(
             'Static evidence', finding.get('evidence_static', 'N/A'))
         dynamic_ev = _quote_evidence(
@@ -811,13 +842,25 @@ Include a concrete code-level fix example if applicable.
         self.calls_made += 1
         # Guard: some free reasoning models echo the task instructions instead
         # of answering (e.g. "We need to provide remediation in max 3 sentences..."),
-        # or return an error fallback when rate-limited (e.g. "REAL (OpenRouter error: 429...)").
-        # Detect prompt leakage or provider errors and retry once with a minimal prompt;
+        # or return an error fallback when rate-limited (e.g. "REAL (Groq error: 429...)").
+        # Detect prompt leakage or any provider error and retry once with a minimal prompt;
         # if it still fails, fall back to the static OWASP default.
         _leak_markers = ("We need to provide", "3 sentences", "concrete code-level")
         _is_leaked = remediation and any(m in remediation for m in _leak_markers)
-        _is_error  = remediation and ("OpenRouter error" in remediation or _is_error_response(remediation))
+        _is_error  = remediation and (
+            _is_error_response(remediation)
+            or "429" in remediation
+            or "rate limit" in remediation.lower()
+            or "quota" in remediation.lower()
+            or "exceeded" in remediation.lower()
+            or "unauthorized" in remediation.lower()
+            or "invalid" in remediation.lower() and "key" in remediation.lower()
+        )
         if _is_leaked or _is_error:
+            # Circuit breaker for rate limits — no point retrying if quota is exhausted
+            if _is_error and ("429" in (remediation or "") or "rate limit" in (remediation or "").lower() or "quota" in (remediation or "").lower()):
+                self._rate_limited = True
+                print(f"  [AI]   Rate limit during remediation — remaining will use defaults.")
             retry_prompt = (
                 f"Give a concise fix for {finding['type']} ({finding.get('owasp','')}) "
                 f"at {finding.get('url','')} parameter '{finding.get('parameter','')}'. "
@@ -825,7 +868,16 @@ Include a concrete code-level fix example if applicable.
             )
             remediation = self.provider.generate_remediation(retry_prompt)
             self.calls_made += 1
-            if any(m in remediation for m in _leak_markers) or ("OpenRouter error" in remediation or _is_error_response(remediation)):
+            _retry_leaked = any(m in remediation for m in _leak_markers) if remediation else False
+            _retry_error  = remediation and (
+                _is_error_response(remediation)
+                or "429" in remediation
+                or "rate limit" in remediation.lower()
+                or "quota" in remediation.lower()
+            )
+            if _retry_error and ("429" in (remediation or "") or "rate limit" in (remediation or "").lower() or "quota" in (remediation or "").lower()):
+                self._rate_limited = True
+            if _retry_leaked or _retry_error:
                 remediation = self._default_remediation(finding)
         # Also fallback if the model returned nothing useful
         if not remediation or len(remediation.strip()) < 20:
