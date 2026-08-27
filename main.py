@@ -21,6 +21,35 @@ from urllib.parse import urlparse
 __version__ = "1.0.0"
 
 
+# Minimal built-in config written when config.example.py is not available
+# (e.g. a pip/PyPI install where the wheel only ships main.py + packages).
+# Mirrors config.example.py defaults; repo checkouts use the real example.
+_DEFAULT_CONFIG = '''\
+# WebVulnScanner configuration (auto-generated)
+REQUEST_TIMEOUT      = 10
+TIME_BASED_DELAY     = 4
+MAX_CRAWL_PAGES      = 50
+MAX_RESPONSE_BYTES   = 2 * 1024 * 1024
+REQUEST_HEADERS      = {
+    "User-Agent": "WebVulnScanner/1.0 (Academic Security Research)"
+}
+ALLOW_SUBDOMAINS = False
+AI_PROVIDER    = "none"
+GEMINI_API_KEY = ""
+GROQ_API_KEY   = ""
+OPENROUTER_API_KEY = ""
+OPENROUTER_MODEL   = "openrouter/free"
+DEEPSEEK_API_KEY = ""
+DEEPSEEK_MODEL   = "deepseek-v4-flash"
+OLLAMA_MODEL   = "codellama"
+OLLAMA_URL     = "http://localhost:11434/api/generate"
+AI_REMEDIATION  = True
+AI_MAX_FINDINGS = 0
+AI_MAX_REMEDIATIONS = 0
+REPORT_OUTPUT_DIR = "reports"
+'''
+
+
 def _ensure_config() -> None:
     """
     Create config.py from config.example.py on first run.
@@ -28,7 +57,8 @@ def _ensure_config() -> None:
     config.py is gitignored (it holds API keys), so a fresh clone
     starts without it and `import config` would crash immediately.
     This runs before the import: if config.py is missing, it is
-    generated from the example, and the project root is added to
+    generated from the example (repo checkouts) or from a built-in
+    minimal template (pip installs), and the project root is added to
     sys.path so the import resolves no matter where the CLI is
     invoked from.
     """
@@ -39,12 +69,15 @@ def _ensure_config() -> None:
        os.path.exists('config.py'):
         return
     example = os.path.join(root, 'config.example.py')
-    if not os.path.exists(example):
-        print("[!] Error: neither config.py nor config.example.py found.")
-        sys.exit(1)
     try:
-        shutil.copyfile(example, os.path.join(root, 'config.py'))
-        print("[!] config.py not found — created from config.example.py")
+        if os.path.exists(example):
+            shutil.copyfile(example, os.path.join(root, 'config.py'))
+            print("[!] config.py not found — created from config.example.py")
+        else:
+            with open(os.path.join(root, 'config.py'), 'w',
+                      encoding='utf-8') as fh:
+                fh.write(_DEFAULT_CONFIG)
+            print("[!] config.py not found — created with default settings")
         print("    Edit config.py to set AI keys and scan defaults.")
     except OSError as e:
         print(f"[!] Error: could not create config.py: {e}")
