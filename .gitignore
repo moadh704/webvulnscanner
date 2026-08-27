@@ -23,3 +23,7 @@ Desktop.ini
 # API keys - never commit
 config.py
 reports/
+# Build artifacts
+WebVulnScanner.egg-info/
+build/
+dist/

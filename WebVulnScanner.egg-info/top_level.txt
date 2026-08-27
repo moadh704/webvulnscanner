@@ -1,5 +1,0 @@
-config
-core
-dynamic
-main
-static
