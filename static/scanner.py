@@ -164,6 +164,12 @@ class StaticScanner:
             '--json',
             '--no-rewrite-rule-ids',
             '--quiet',
+            # Semgrep 1.x only scans git-tracked files by default. A user's
+            # source directory often is not a git repo (or has untracked
+            # files), which would silently scan nothing. --no-git-ignore
+            # disables git consultation so the given directory is always
+            # scanned in full.
+            '--no-git-ignore',
         ]
 
         # Add each rule file
