@@ -652,7 +652,7 @@ if scan_button and history_choice == "(new scan)":
 
                     if html_path.exists():
                         with st.expander("👁️ Preview HTML Report", expanded=False):
-                            st.components.v1.html(open(html_path, 'r', encoding='utf-8').read(), height=600, scrolling=True)
+                            st.iframe(srcdoc=open(html_path, 'r', encoding='utf-8').read(), height=600)
 
                     with st.expander("🖥️ Full CLI Output"):
                         st.code(stdout[-12000:] or "(no output)", language="text")
@@ -706,7 +706,7 @@ elif history_choice != "(new scan)":
 
         if hpath.exists():
             with st.expander("👁️ Preview HTML"):
-                st.components.v1.html(open(hpath, 'r', encoding='utf-8').read(), height=600, scrolling=True)
+                st.iframe(srcdoc=open(hpath, 'r', encoding='utf-8').read(), height=600)
 
     except Exception as e:
         st.error(f"Could not load {history_choice}: {e}")
