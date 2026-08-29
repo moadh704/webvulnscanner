@@ -44,6 +44,7 @@ AI layer for false-positive review and remediation notes.
 - [AI enhancement](#ai-enhancement-optional)
 - [Project layout](#project-layout)
 - [Thesis](#thesis)
+- [Troubleshooting](#troubleshooting)
 - [Disclaimer](#disclaimer)
 - [License](#license)
 
@@ -113,15 +114,17 @@ cd webvulnscanner
 
 ```bash
 # Windows — double-click or run in cmd/powershell
-setup.bat
+setup.bat                # creates venv, installs deps, installs wvs, copies config.py
 
 # Linux / macOS
-bash setup.sh
+bash setup.sh            # same steps for bash
 
 # Or manually on any platform:
 pip install -r requirements.txt
 pip install -e .         # optional: enables the wvs command
 ```
+
+On Windows, `run.bat` opens an interactive menu (quick scans, UI launcher, open reports folder).
 
 **3. Scan**
 
@@ -228,7 +231,7 @@ targets only** — paths sanitized, no production systems involved.
 ## Configuration
 
 ```bash
-cp config.example.py config.py
+cp config.example.py config.py   # or just run wvs once — config.py is created automatically from the example with sensible defaults
 ```
 
 Edit `config.py` for request timeouts, crawl limits, AI keys, and report paths.
@@ -289,6 +292,16 @@ Built as a Master's thesis project:
 > Static-Dynamic Approach**
 
 *Moadh & Mamon · 2026*
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| `semgrep` install fails / `semgrep: command not found` | `pip install semgrep --upgrade` — requires Python 3.8+ and a recent pip. On some systems use `pip install semgrep --no-cache` |
+| OpenRouter free models return `404` or empty responses | Free catalog rotates weekly. Check live list at https://openrouter.ai/collections/free-models or use `openrouter/free` auto-router (default). Paid `openai/gpt-4o-mini` (~$0.01/scan) is the cheapest reliable fallback |
+| `429 free-models-per-day` | Free tier is 50/day (1000/day after $10 credits). Wait 24h, add credits, switch to Groq (`groq` 14k/day), or rerun with `--no-ai` for static remediations |
+| `wvs: command not found` after `pip install -e .` | Activate the venv (`venv\Scripts\activate` or `source venv/bin/activate`) or use `wvs.bat` / `python -m main` directly |
+| DVWA shows setup page / DB error | Start XAMPP Apache + MySQL and visit `http://localhost/dvwa/setup.php` → Create / Reset Database |
 
 ## Disclaimer
 
